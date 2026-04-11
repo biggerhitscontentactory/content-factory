@@ -448,6 +448,11 @@
 
 <script>
 let isRunning = false;
+// API token for authenticated fetch calls (bypasses session cookie issues on Railway)
+const API_TOKEN = '{{ api_token }}';
+function authHeaders(extra) {
+  return Object.assign({'Content-Type':'application/json', 'X-Auth-Token': API_TOKEN}, extra||{});
+}
 
 // ── Tab Navigation ──────────────────────────────────────────────────────────
 function showTab(name) {
@@ -589,8 +594,7 @@ async function runBatch(mode, dryRun) {
     // Step 1: kick off async job — returns immediately with job_id
     const r = await fetch('/api/run', {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: {'Content-Type':'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({mode, count, dry_run: dryRun})
     });
     const contentType = r.headers.get('content-type') || '';
@@ -625,7 +629,7 @@ async function pollJob(jobId, outputId, spinnerId, mode) {
   while (true) {
     await new Promise(res => setTimeout(res, POLL_INTERVAL));
     try {
-      const pr = await fetch(`/api/run/status/${jobId}`, {credentials: 'same-origin'});
+      const pr = await fetch(`/api/run/status/${jobId}`, {headers: {'X-Auth-Token': API_TOKEN}});
       // Handle session expiry — now returns JSON 401 instead of HTML redirect
       if (pr.status === 401) {
         const errData = await pr.json().catch(() => ({}));
@@ -787,7 +791,7 @@ async function runProductUrl() {
   try {
     const r = await fetch('/api/run', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({mode:'ecommerce', count:1, dry_run:false, product_url:url})
     });
     const contentType = r.headers.get('content-type') || '';
@@ -862,7 +866,7 @@ async function addTopic() {
   try {
     const r = await fetch('/api/add_topic', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({
         topic,
         pillar: document.getElementById('ai-pillar').value,

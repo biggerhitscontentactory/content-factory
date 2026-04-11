@@ -24,9 +24,10 @@ app.secret_key = os.environ.get("SECRET_KEY", "cf-secret-2026-usa-store")
 # Keep session alive for 30 days — prevents expiry during long DALL-E runs
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = True   # Required for HTTPS on Railway
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_NAME"] = "cf_session"
+# NOTE: SESSION_COOKIE_SECURE intentionally NOT set — Railway's proxy handles HTTPS
+# Setting it to True breaks cookie delivery through Railway's load balancer
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR  = os.path.join(BASE_DIR, "data")
@@ -42,15 +43,26 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "America250")
 
+# Simple in-memory token store: token -> True
+# Token is generated on login and stored in the page's localStorage via JS
+# This bypasses session cookie issues on Railway's HTTPS proxy
+import secrets as _secrets
+_valid_tokens = set()
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not session.get("logged_in"):
-            # Return JSON 401 for API routes so the browser doesn't get redirected
-            if request.path.startswith("/api/"):
-                return jsonify({"error": "session_expired", "redirect": "/login"}), 401
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
+        # Check session cookie first (page loads)
+        if session.get("logged_in"):
+            return f(*args, **kwargs)
+        # Check X-Auth-Token header (API calls from JS)
+        token = request.headers.get("X-Auth-Token", "")
+        if token and token in _valid_tokens:
+            return f(*args, **kwargs)
+        # Not authenticated
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "session_expired", "redirect": "/login"}), 401
+        return redirect(url_for("login"))
     return decorated
 
 @app.route("/login", methods=["GET", "POST"])
@@ -60,7 +72,12 @@ def login():
         pwd = request.form.get("password", "")
         if pwd == DASHBOARD_PASSWORD:
             session["logged_in"] = True
-            session.permanent = True  # Use PERMANENT_SESSION_LIFETIME (30 days)
+            session.permanent = True
+            # Generate a token for JS API calls (stored in localStorage)
+            token = _secrets.token_hex(24)
+            _valid_tokens.add(token)
+            # Pass token to template via session so JS can store it
+            session["api_token"] = token
             return redirect(url_for("index"))
         error = "Incorrect password. Please try again."
     return render_template("login.html", error=error)
@@ -74,7 +91,7 @@ def logout():
 @app.route("/")
 @login_required
 def index():
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", api_token=session.get("api_token", ""))
 
 # ─── API: Stats ───────────────────────────────────────────────────────────────
 @app.route("/api/stats")
