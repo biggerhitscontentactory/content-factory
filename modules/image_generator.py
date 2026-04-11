@@ -203,74 +203,108 @@ def build_instagram_prompt(product: dict, image_prompt: str = "") -> str:
 def add_pinterest_overlay(img: Image.Image, headline: str, subtitle: str = "", price: str = "") -> Image.Image:
     """
     Add Pinterest-style overlay matching OfficialUSAStore style:
-    - White bar at top with bold navy headline text
-    - Subtitle in smaller regular text below headline
+    - White bar at top with LARGE bold navy headline text
+    - Subtitle in readable regular text below headline
     - OfficialUSAStore.com watermark bottom-right
     """
     w, h = img.size
     draw = ImageDraw.Draw(img)
 
-    # ── Top white bar with headline ──────────────────────────────────────────
-    bar_h = int(h * 0.22)  # ~22% of height for text area
-    # Draw white bar
-    draw.rectangle([(0, 0), (w, bar_h)], fill=COLOR_WHITE)
-
     pad = int(w * 0.05)
     text_w = w - pad * 2
 
-    # Headline font (bold, large)
-    headline_font = get_font(int(w * 0.085))
-    # Subtitle font (regular, smaller)
-    subtitle_font = get_font_regular(int(w * 0.042))
+    # ── Font sizes: much larger for readability ──────────────────────────────
+    # On a 1000px wide pin: headline=130px, subtitle=72px, price=90px, watermark=52px
+    headline_size = int(w * 0.13)   # was 0.085 — now ~53% bigger
+    subtitle_size = int(w * 0.072)  # was 0.042 — now ~71% bigger
+    price_size    = int(w * 0.09)   # was 0.055 — now ~64% bigger
+    wm_size       = int(w * 0.052)  # was 0.028 — now ~86% bigger
 
-    # Wrap and draw headline
+    headline_font = get_font(headline_size)
+    subtitle_font = get_font_regular(subtitle_size)
+
+    # ── Measure text to size the bar dynamically ─────────────────────────────
     headline_upper = headline.upper()
     h_lines = wrap_text(headline_upper, headline_font, text_w, draw)
 
-    # Calculate total text block height
-    h_line_h = int(w * 0.092)
-    s_line_h = int(w * 0.048)
-    total_text_h = len(h_lines) * h_line_h + (s_line_h + 8 if subtitle else 0)
+    h_line_h = int(headline_size * 1.15)  # line height with spacing
+    s_line_h = int(subtitle_size * 1.2)
+    total_text_h = len(h_lines) * h_line_h + (s_line_h + 12 if subtitle else 0)
 
-    # Center vertically in bar
+    # Pre-measure subtitle lines so bar height accounts for them
+    s_lines_preview = []
+    if subtitle:
+        s_lines_preview = wrap_text(subtitle, subtitle_font, text_w, draw)[:2]
+        total_text_h += len(s_lines_preview) * s_line_h + 12
+
+    # Bar height: text block + generous top/bottom padding
+    bar_h = total_text_h + int(h * 0.07)
+    bar_h = max(bar_h, int(h * 0.22))  # minimum 22% of image height
+
+    # Draw white bar
+    draw.rectangle([(0, 0), (w, bar_h)], fill=COLOR_WHITE)
+    # Add a thin red accent line at bottom of bar
+    draw.rectangle([(0, bar_h - 6), (w, bar_h)], fill=COLOR_RED)
+
+    # ── Draw headline centered in bar ────────────────────────────────────────
     y = (bar_h - total_text_h) // 2
-    if y < 8:
-        y = 8
+    if y < 12:
+        y = 12
 
     for line in h_lines:
         bbox = draw.textbbox((0, 0), line, font=headline_font)
-        x = (w - (bbox[2] - bbox[0])) // 2
+        lw = bbox[2] - bbox[0]
+        x = (w - lw) // 2
+        # Shadow for depth
+        draw.text((x + 2, y + 2), line, font=headline_font, fill=(180, 180, 200))
         draw.text((x, y), line, font=headline_font, fill=COLOR_NAVY)
         y += h_line_h
 
+    # ── Draw subtitle ────────────────────────────────────────────────────────
     if subtitle:
-        bbox = draw.textbbox((0, 0), subtitle, font=subtitle_font)
-        x = (w - (bbox[2] - bbox[0])) // 2
-        draw.text((x, y + 4), subtitle, font=subtitle_font, fill=(80, 80, 100))
+        # Truncate subtitle to fit on 2 lines max (already measured above)
+        s_lines = s_lines_preview if s_lines_preview else wrap_text(subtitle, subtitle_font, text_w, draw)[:2]
+        for sline in s_lines:
+            bbox = draw.textbbox((0, 0), sline, font=subtitle_font)
+            x = (w - (bbox[2] - bbox[0])) // 2
+            draw.text((x, y + 6), sline, font=subtitle_font, fill=(60, 60, 90))
+            y += s_line_h
 
-    # ── Price badge (bottom-left of image area) ──────────────────────────────
+    # ── Price badge (bottom-left, large and bold) ────────────────────────────
     if price:
-        price_font = get_font(int(w * 0.055))
-        pt = f"${price}"
+        price_font = get_font(price_size)
+        try:
+            pt = f"${float(price):.2f}"
+        except Exception:
+            pt = f"${price}"
         pb = draw.textbbox((0, 0), pt, font=price_font)
-        pw = pb[2] - pb[0] + 24
-        ph = pb[3] - pb[1] + 14
+        pw = pb[2] - pb[0] + 40
+        ph = pb[3] - pb[1] + 24
         bx = pad
-        by = h - int(h * 0.08) - ph
-        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=10, fill=COLOR_RED)
-        draw.text((bx + pw // 2, by + ph // 2), pt, font=price_font, fill=COLOR_WHITE, anchor="mm")
+        by = h - int(h * 0.07) - ph
+        # Shadow
+        draw.rounded_rectangle([(bx + 3, by + 3), (bx + pw + 3, by + ph + 3)],
+                                radius=12, fill=(100, 0, 0))
+        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=12, fill=COLOR_RED)
+        draw.text((bx + pw // 2, by + ph // 2), pt, font=price_font,
+                  fill=COLOR_WHITE, anchor="mm")
 
-    # ── Watermark bottom-right ────────────────────────────────────────────────
-    wm_font = get_font(int(w * 0.028))
+    # ── Watermark bottom-right, large enough to read ─────────────────────────
+    wm_font = get_font(wm_size)
     wm_text = "OfficialUSAStore.com"
     wb = draw.textbbox((0, 0), wm_text, font=wm_font)
     wm_w = wb[2] - wb[0]
-    # Semi-transparent background for readability
+    wm_h = wb[3] - wb[1]
     wm_x = w - pad - wm_w
-    wm_y = h - int(h * 0.025)
-    # Draw with shadow for visibility
-    draw.text((wm_x + 1, wm_y + 1), wm_text, font=wm_font, fill=(0, 0, 0, 120))
-    draw.text((wm_x, wm_y), wm_text, font=wm_font, fill=COLOR_WHITE, anchor="lb")
+    wm_y = h - pad - wm_h
+    # Dark semi-transparent pill background
+    bg_pad = 10
+    draw.rounded_rectangle(
+        [(wm_x - bg_pad, wm_y - bg_pad // 2),
+         (wm_x + wm_w + bg_pad, wm_y + wm_h + bg_pad // 2)],
+        radius=8, fill=(0, 0, 0, 160)
+    )
+    draw.text((wm_x, wm_y), wm_text, font=wm_font, fill=COLOR_WHITE)
 
     return img
 

@@ -313,7 +313,132 @@ def api_ai_topics():
     return jsonify({"topics": list(reversed(topics[-20:]))})
 
 
-# ─── API: Config Check ────────────────────────────────────────────────────────
+# ─── API: Pinterest Board Manager ───────────────────────────────────────────────────────
+@app.route("/api/boards", methods=["GET"])
+@login_required
+def api_boards():
+    """Return cached board list and current board config."""
+    try:
+        sys.path.insert(0, MOD_DIR)
+        from board_manager import load_board_config, get_all_boards
+        config = load_board_config()
+        return jsonify({
+            "boards": config.get("boards", []),
+            "tier_map": config.get("tier_map", {}),
+            "category_map": config.get("category_map", {}),
+            "default_board_id": config.get("default_board_id", ""),
+            "repin_boards": config.get("repin_boards", []),
+            "last_fetched": config.get("last_fetched"),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e), "boards": []})
+
+
+@app.route("/api/boards/refresh", methods=["POST"])
+@login_required
+def api_boards_refresh():
+    """Fetch boards from Pinterest API and refresh cache."""
+    try:
+        sys.path.insert(0, MOD_DIR)
+        from board_manager import refresh_boards
+        ok, msg, boards = refresh_boards()
+        return jsonify({"success": ok, "message": msg, "boards": boards})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e), "boards": []})
+
+
+@app.route("/api/boards/save", methods=["POST"])
+@login_required
+def api_boards_save():
+    """Save tier_map, category_map, default_board_id, repin_boards config."""
+    try:
+        sys.path.insert(0, MOD_DIR)
+        from board_manager import (
+            update_tier_map, update_category_map,
+            update_default_board, update_repin_boards
+        )
+        data = request.json or {}
+        if "tier_map" in data:
+            update_tier_map(data["tier_map"])
+        if "category_map" in data:
+            update_category_map(data["category_map"])
+        if "default_board_id" in data:
+            update_default_board(data["default_board_id"])
+        if "repin_boards" in data:
+            update_repin_boards(data["repin_boards"])
+        return jsonify({"success": True, "message": "Board config saved"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+
+# ─── API: Pinterest Repinner ───────────────────────────────────────────────────────────────
+@app.route("/api/repin", methods=["POST"])
+@login_required
+def api_repin():
+    """Run a Pinterest repinning session."""
+    data = request.json or {}
+    dry_run = data.get("dry_run", True)
+
+    runner_path = os.path.join(MOD_DIR, "runner.py")
+    cmd = [sys.executable, runner_path, "--mode", "repin"]
+    if dry_run:
+        cmd.append("--dry-run")
+
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=300, cwd=BASE_DIR,
+            env={**os.environ, "PYTHONPATH": f"{BASE_DIR}:{MOD_DIR}"}
+        )
+        output = (result.stdout + result.stderr).strip()
+
+        # Parse structured repin JSON if present
+        repin_data = None
+        if "__REPIN_JSON_START__" in output:
+            try:
+                start = output.index("__REPIN_JSON_START__") + len("__REPIN_JSON_START__")
+                end = output.index("__REPIN_JSON_END__")
+                repin_data = json.loads(output[start:end].strip())
+                output = output[:output.index("__REPIN_JSON_START__")].strip()
+            except Exception:
+                pass
+
+        _log_activity({
+            "timestamp": datetime.now().isoformat(),
+            "action": "repin",
+            "dry_run": dry_run,
+            "success": result.returncode == 0,
+            "summary": output[-200:] if output else ""
+        })
+
+        return jsonify({
+            "output": output,
+            "success": result.returncode == 0,
+            "repin_data": repin_data,
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"output": "Repin session timed out after 5 minutes", "success": False})
+    except Exception as e:
+        return jsonify({"output": f"Error: {str(e)}", "success": False})
+
+
+# ─── API: Repin Log ───────────────────────────────────────────────────────────────────────
+@app.route("/api/repin_log")
+@login_required
+def api_repin_log():
+    log_file = os.path.join(DATA_DIR, "repin_log.json")
+    entries = []
+    if os.path.exists(log_file):
+        with open(log_file) as f:
+            for line in f:
+                try:
+                    entries.append(json.loads(line.strip()))
+                except Exception:
+                    pass
+    return jsonify({"entries": list(reversed(entries[-50:]))})
+
+
+# ─── API: Config Check ────────────────────────────────────────────────────────────────
 @app.route("/api/config_status")
 @login_required
 def api_config_status():
@@ -325,6 +450,7 @@ def api_config_status():
         "oneup_instagram": bool(os.environ.get("ONEUP_INSTAGRAM_ID")),
         "oneup_facebook": bool(os.environ.get("ONEUP_FACEBOOK_ID")),
         "oneup_linkedin": bool(os.environ.get("ONEUP_LINKEDIN_ID")),
+        "pinterest_token": bool(os.environ.get("PINTEREST_ACCESS_TOKEN")),
     })
 
 

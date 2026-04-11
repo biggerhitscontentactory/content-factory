@@ -40,6 +40,16 @@ from scheduler import (
     log_scheduled_posts, get_daily_summary, load_daily_counts, get_oneup_accounts
 )
 from queue_manager import get_next_product, mark_product_posted, get_queue_stats
+try:
+    from board_manager import get_board_for_product, get_repin_boards, get_all_boards
+except ImportError:
+    get_board_for_product = lambda p: ""
+    get_repin_boards = lambda: []
+    get_all_boards = lambda: []
+try:
+    from repinner import run_repin_session
+except ImportError:
+    run_repin_session = None
 from config import (
     OUTPUT_DIR_ECOMMERCE, OUTPUT_DIR_AI_CHANNEL, LOG_DIR, DATA_DIR,
     AI_CHANNEL_SHEET_ID
@@ -120,12 +130,20 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
             total_imgs = sum(len(v) for v in images.values() if v)
             print(f"[Runner] Generated {total_imgs} images")
 
+            # Resolve Pinterest board_id for this product
+            board_id = get_board_for_product(product)
+            if board_id:
+                print(f"[Runner] Pinterest board: {board_id}")
+            else:
+                print("[Runner] No board mapped — pin will go to default board")
+
             # Schedule posts (live only)
             scheduled = {}
             if not dry_run:
                 print("[Runner] Scheduling posts via OneUp...")
                 scheduled = schedule_ecommerce_content_pack(
-                    content_pack, images, ACCOUNT_IDS["ecommerce"]
+                    content_pack, images, ACCOUNT_IDS["ecommerce"],
+                    pinterest_board_id=board_id
                 )
                 log_scheduled_posts(scheduled, title, "ecommerce")
                 print(f"[Runner] Scheduled {len(scheduled)} posts")
@@ -149,6 +167,7 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
                 "handle": handle,
                 "tier": product.get("tier", 3),
                 "price": product.get("price", 0),
+                "board_id": board_id,
                 "images": web_images,
                 "pinterest_pins": [
                     {
@@ -360,10 +379,50 @@ def get_oneup_account_ids():
         print()
 
 
+# ─── Repin Batch ─────────────────────────────────────────────────────────────
+def run_repin_batch(dry_run=False):
+    """Run a Pinterest repinning session using configured boards."""
+    print(f"\n{'='*60}")
+    print(f"PINTEREST REPINNER — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"Mode: {'DRY RUN' if dry_run else 'LIVE'}")
+    print(f"{'='*60}\n")
+
+    if run_repin_session is None:
+        print("[Repinner] repinner module not available")
+        return 0, 1
+
+    repin_ids = get_repin_boards()
+    boards = get_all_boards()
+    name_map = {b["id"]: b["name"] for b in boards}
+
+    if not repin_ids:
+        print("[Repinner] No repin boards configured.")
+        print("[Repinner] Go to Setup → Board Selector → check boards for repinning.")
+        return 0, 0
+
+    print(f"[Repinner] Repin boards: {[name_map.get(bid, bid) for bid in repin_ids]}")
+    result = run_repin_session(repin_ids, name_map, dry_run=dry_run)
+
+    if "error" in result:
+        print(f"[Repinner] Error: {result['error']}")
+        return 0, 1
+
+    print(f"\n{result['message']}")
+    print(f"By board: {result.get('by_board', {})}")
+    print(f"Skipped: {result.get('skipped', 0)} | Errors: {result.get('errors', 0)}")
+
+    # Emit JSON block for dashboard
+    print("__REPIN_JSON_START__")
+    print(json.dumps(result, indent=2))
+    print("__REPIN_JSON_END__")
+
+    return result.get("total", 0), result.get("errors", 0)
+
+
 # ─── CLI Entry Point ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Content Factory Runner")
-    parser.add_argument("--mode", choices=["ecommerce", "ai_channel", "get_accounts"],
+    parser.add_argument("--mode", choices=["ecommerce", "ai_channel", "get_accounts", "repin"],
                         default="ecommerce")
     parser.add_argument("--count", type=int, default=5)
     parser.add_argument("--dry-run", action="store_true")
@@ -377,3 +436,5 @@ if __name__ == "__main__":
         run_ai_channel_batch(dry_run=args.dry_run)
     elif args.mode == "get_accounts":
         get_oneup_account_ids()
+    elif args.mode == "repin":
+        run_repin_batch(dry_run=args.dry_run)

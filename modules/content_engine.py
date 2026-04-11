@@ -70,7 +70,10 @@ CRITICAL WRITING RULES — follow these exactly:
 - Include at least one specific concrete detail (a price, a date, a number, a place)
 - Write like a real human who is passionate about this topic
 - No emoji overload: maximum 2 emojis per post, zero on LinkedIn and Reddit
-- No hashtag stuffing: maximum 5 hashtags, only where natural
+- Pinterest pins: include 7-10 relevant hashtags at end of description
+- Instagram: include 15-20 hashtags (niche + broad + seasonal mix)
+- Facebook: no hashtags (hurts reach on Facebook)
+- LinkedIn: no hashtags
 """
 
 
@@ -115,23 +118,26 @@ Generate a complete content pack. Return ONLY valid JSON with this exact structu
   "pinterest_pins": [
     {{
       "title": "Pin title (max 100 chars, keyword-rich for Pinterest SEO)",
-      "description": "Pin description (150-300 chars, conversational, includes product URL)",
+      "description": "Pin description (150-250 chars, conversational, ends with product URL)",
+      "hashtags": "#patriotic #america250 #usagifts #july4th #americanpride #giftideas #usastore",
       "image_prompt": "Detailed DALL-E prompt for a vertical 2:3 lifestyle image showing this product in a patriotic American setting"
     }},
     {{
       "title": "Different angle pin title",
-      "description": "Different angle description",
+      "description": "Different angle description ending with product URL",
+      "hashtags": "#patrioticgifts #america #july4th #1776 #usapride #giftsforher #giftsforhim",
       "image_prompt": "Different scene DALL-E prompt"
     }},
     {{
       "title": "Gift-focused pin title",
-      "description": "Gift-focused description",
+      "description": "Gift-focused description ending with product URL",
+      "hashtags": "#giftideas #patrioticgifts #americangifts #4thofjuly #america250 #usagifts #shopusa",
       "image_prompt": "Gift presentation DALL-E prompt"
     }}
   ],
   "instagram_post": {{
     "caption": "Instagram caption (150-220 chars, conversational, max 2 emojis, ends with CTA)",
-    "hashtags": "#patriotic #america250 #usagifts #july4th #americanpride",
+    "hashtags": "15-20 relevant hashtags: mix of niche (#america250 #patrioticgifts), broad (#giftideas #shopsmall), and seasonal (#july4th #4thofjuly #independence day). Format: #tag1 #tag2 ...",
     "image_prompt": "DALL-E prompt for a square lifestyle product image, bright and eye-catching"
   }},
   "facebook_post": {{

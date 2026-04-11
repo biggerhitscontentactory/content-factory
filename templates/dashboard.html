@@ -362,7 +362,7 @@
       </table>
     </div>
 
-    <div class="card">
+    <div class="card" style="margin-bottom:14px;">
       <div class="section-title">Get OneUp Account IDs</div>
       <p style="font-size:13px;color:#94a3b8;margin-bottom:14px;">
         After connecting your social accounts in OneUp, click below to retrieve their IDs. Copy each ID and add it as an environment variable in Railway.
@@ -372,6 +372,75 @@
         <div class="spinner"></div><span>Fetching...</span>
       </div>
       <div class="log-box" id="setup-output" style="margin-top:14px;display:none;"></div>
+    </div>
+
+    <!-- ── Pinterest Board Selector ─────────────────────────────────────── -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-title">📌 Pinterest Board Selector</div>
+      <div class="alert alert-blue" style="margin-bottom:14px;">
+        Set <code>PINTEREST_ACCESS_TOKEN</code> in Railway Variables, then click <strong>Fetch Boards</strong> to load your boards. Map each product tier and category to a board, then choose which boards to repin into.
+      </div>
+
+      <div id="board-token-warning" style="display:none;" class="alert" style="background:#7f1d1d;border-color:#ef4444;color:#fca5a5;margin-bottom:14px;">
+        ⚠️ <strong>PINTEREST_ACCESS_TOKEN</strong> not set — board posting and repinning will not work.
+      </div>
+
+      <div class="btn-row" style="margin-bottom:14px;">
+        <button class="btn btn-blue" onclick="fetchBoards()">🔄 Fetch My Boards</button>
+        <button class="btn btn-green" onclick="saveBoardConfig()" id="save-boards-btn" disabled>💾 Save Board Config</button>
+      </div>
+      <div id="board-last-fetched" style="font-size:12px;color:#64748b;margin-bottom:12px;"></div>
+
+      <!-- Board list with tier assignment -->
+      <div id="board-list-wrap" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;padding:0 4px 6px;border-bottom:1px solid #334155;margin-bottom:8px;">
+          <span>Board Name</span><span>Tier Assignment</span><span>Category</span><span>Repin?</span>
+        </div>
+        <div id="board-rows"></div>
+
+        <!-- Default board -->
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid #334155;">
+          <label style="font-size:13px;color:#94a3b8;display:block;margin-bottom:6px;">Default Board (fallback for unassigned products)</label>
+          <select id="default-board-select" style="width:100%;max-width:400px;">
+            <option value="">— Select default board —</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="board-spinner" class="spinner-wrap" style="display:none;">
+        <div class="spinner"></div><span>Loading boards from Pinterest...</span>
+      </div>
+      <div id="board-output" class="log-box" style="display:none;margin-top:10px;"></div>
+    </div>
+
+    <!-- ── Pinterest Repinner ──────────────────────────────────────────────── -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-title">🔁 Pinterest Auto-Repinner</div>
+      <p style="font-size:13px;color:#94a3b8;margin-bottom:14px;">
+        Repins 25–45 trending pins per day across your selected boards, rotating through keyword pools per board theme. Run daily (or schedule it). Check <em>Repin?</em> on boards above to enable them.
+      </p>
+
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:14px;font-size:13px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+          <div><div style="color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">Today's Repins</div><div id="repin-today" style="font-size:24px;font-weight:800;color:#f8fafc;">—</div></div>
+          <div><div style="color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">Daily Target</div><div style="font-size:24px;font-weight:800;color:#f8fafc;">25–45</div></div>
+          <div><div style="color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">Boards Active</div><div id="repin-boards-count" style="font-size:24px;font-weight:800;color:#f8fafc;">—</div></div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-amber" onclick="runRepin(true)">🔍 Dry Run Repin</button>
+        <button class="btn btn-green" onclick="runRepin(false)">▶️ Run Live Repin</button>
+        <button class="btn btn-ghost" onclick="loadRepinLog()">📋 View Repin Log</button>
+      </div>
+      <div id="repin-spinner" class="spinner-wrap" style="display:none;">
+        <div class="spinner"></div><span id="repin-spinner-text">Running repinner...</span>
+      </div>
+      <div id="repin-output" class="log-box" style="display:none;margin-top:10px;"></div>
+      <div id="repin-log-wrap" style="display:none;margin-top:14px;">
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:8px;">Recent Repins</div>
+        <div id="repin-log-rows"></div>
+      </div>
     </div>
   </div>
 
