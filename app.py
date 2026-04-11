@@ -11,6 +11,7 @@ import json
 import subprocess
 import threading
 import hashlib
+import uuid
 from datetime import datetime
 from functools import wraps
 import re
