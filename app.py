@@ -18,8 +18,12 @@ from flask import (Flask, render_template, request, jsonify,
                    redirect, url_for, session, flash, send_from_directory)
 
 # ─── App Setup ────────────────────────────────────────────────────────────────
+from datetime import timedelta
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "cf-secret-2026-usa-store")
+# Keep session alive for 30 days — prevents expiry during long DALL-E runs
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR  = os.path.join(BASE_DIR, "data")
@@ -50,6 +54,7 @@ def login():
         pwd = request.form.get("password", "")
         if pwd == DASHBOARD_PASSWORD:
             session["logged_in"] = True
+            session.permanent = True  # Use PERMANENT_SESSION_LIFETIME (30 days)
             return redirect(url_for("index"))
         error = "Incorrect password. Please try again."
     return render_template("login.html", error=error)
@@ -167,7 +172,7 @@ def api_run():
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True,
-            timeout=180, cwd=BASE_DIR,
+            timeout=600, cwd=BASE_DIR,  # 10 min — DALL-E 3 for 5 products can take ~5 min
             env={**os.environ, "PYTHONPATH": f"{BASE_DIR}:{MOD_DIR}"}
         )
         output = (result.stdout + result.stderr).strip()
@@ -201,7 +206,7 @@ def api_run():
             "preview": preview_data,
         })
     except subprocess.TimeoutExpired:
-        return jsonify({"output": "Timed out after 3 minutes", "success": False, "preview": None})
+        return jsonify({"output": "Timed out after 10 minutes — try a smaller batch (1-2 products)", "success": False, "preview": None})
     except Exception as e:
         return jsonify({"output": f"Error: {str(e)}", "success": False, "preview": None})
 
