@@ -152,7 +152,76 @@ def api_stats():
         return jsonify({"error": str(e)})
 
 
-# ─── API: Run Batch ───────────────────────────────────────────────────────────
+# ─── Async Job Store ─────────────────────────────────────────────────────────
+# In-memory job store: {job_id: {status, output, preview, ...}}
+_jobs = {}
+_jobs_lock = threading.Lock()
+
+
+def _run_job_worker(job_id, cmd, mode, count, dry_run):
+    """Background thread: runs subprocess and streams output to job store."""
+    with _jobs_lock:
+        _jobs[job_id]["status"] = "running"
+        _jobs[job_id]["output"] = "Starting..."
+
+    try:
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, cwd=BASE_DIR,
+            env={**os.environ, "PYTHONPATH": f"{BASE_DIR}:{MOD_DIR}"}
+        )
+        lines = []
+        for line in proc.stdout:
+            lines.append(line.rstrip())
+            visible = [l for l in lines if not l.startswith("__")]
+            with _jobs_lock:
+                _jobs[job_id]["output"] = "\n".join(visible[-80:])
+
+        proc.wait()
+        output = "\n".join(lines)
+
+        # Parse structured preview JSON
+        preview_data = None
+        if "__PREVIEW_JSON_START__" in output:
+            try:
+                start = output.index("__PREVIEW_JSON_START__") + len("__PREVIEW_JSON_START__")
+                end = output.index("__PREVIEW_JSON_END__")
+                preview_data = json.loads(output[start:end].strip())
+                output = output[:output.index("__PREVIEW_JSON_START__")].strip()
+            except Exception:
+                pass
+
+        success = proc.returncode == 0
+        _log_activity({
+            "timestamp": datetime.now().isoformat(),
+            "action": f"run_{mode}",
+            "count": count,
+            "dry_run": dry_run,
+            "success": success,
+            "summary": output[-200:] if output else ""
+        })
+
+        with _jobs_lock:
+            _jobs[job_id].update({
+                "status": "done",
+                "output": output,
+                "preview": preview_data,
+                "success": success,
+                "finished_at": datetime.now().isoformat(),
+            })
+
+    except Exception as e:
+        with _jobs_lock:
+            _jobs[job_id].update({
+                "status": "error",
+                "output": f"Job error: {str(e)}",
+                "preview": None,
+                "success": False,
+                "finished_at": datetime.now().isoformat(),
+            })
+
+
+# ─── API: Run Batch (async) ───────────────────────────────────────────────────
 @app.route("/api/run", methods=["POST"])
 @login_required
 def api_run():
@@ -169,46 +238,43 @@ def api_run():
     if product_url:
         cmd.extend(["--product-url", product_url])
 
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True,
-            timeout=600, cwd=BASE_DIR,  # 10 min — DALL-E 3 for 5 products can take ~5 min
-            env={**os.environ, "PYTHONPATH": f"{BASE_DIR}:{MOD_DIR}"}
-        )
-        output = (result.stdout + result.stderr).strip()
-
-        # Log activity
-        _log_activity({
-            "timestamp": datetime.now().isoformat(),
-            "action": f"run_{mode}",
+    job_id = str(uuid.uuid4())[:8]
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "status": "queued",
+            "output": "Queued...",
+            "preview": None,
+            "success": None,
+            "started_at": datetime.now().isoformat(),
+            "finished_at": None,
+            "mode": mode,
             "count": count,
             "dry_run": dry_run,
-            "success": result.returncode == 0,
-            "summary": output[-200:] if output else ""
-        })
+        }
 
-        # Parse structured preview JSON if present
-        preview_data = None
-        if "__PREVIEW_JSON_START__" in output:
-            try:
-                start = output.index("__PREVIEW_JSON_START__") + len("__PREVIEW_JSON_START__")
-                end = output.index("__PREVIEW_JSON_END__")
-                json_str = output[start:end].strip()
-                preview_data = json.loads(json_str)
-                # Remove the JSON block from the log output
-                output = output[:output.index("__PREVIEW_JSON_START__")].strip()
-            except Exception as pe:
-                pass  # If parsing fails, just show raw output
+    t = threading.Thread(target=_run_job_worker,
+                         args=(job_id, cmd, mode, count, dry_run),
+                         daemon=True)
+    t.start()
+    return jsonify({"job_id": job_id, "status": "queued"})
 
-        return jsonify({
-            "output": output,
-            "success": result.returncode == 0,
-            "preview": preview_data,
-        })
-    except subprocess.TimeoutExpired:
-        return jsonify({"output": "Timed out after 10 minutes — try a smaller batch (1-2 products)", "success": False, "preview": None})
-    except Exception as e:
-        return jsonify({"output": f"Error: {str(e)}", "success": False, "preview": None})
+
+@app.route("/api/run/status/<job_id>")
+@login_required
+def api_run_status(job_id):
+    """Poll job status — returns live output + final preview when done."""
+    with _jobs_lock:
+        job = dict(_jobs.get(job_id, {}))
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify({
+        "job_id": job_id,
+        "status": job["status"],
+        "output": job["output"],
+        "preview": job.get("preview"),
+        "success": job.get("success"),
+        "finished_at": job.get("finished_at"),
+    })
 
 
 # ─── API: Rebuild Queue ───────────────────────────────────────────────────────
