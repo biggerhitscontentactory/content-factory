@@ -589,6 +589,7 @@ async function runBatch(mode, dryRun) {
     // Step 1: kick off async job — returns immediately with job_id
     const r = await fetch('/api/run', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({mode, count, dry_run: dryRun})
     });
@@ -624,7 +625,18 @@ async function pollJob(jobId, outputId, spinnerId, mode) {
   while (true) {
     await new Promise(res => setTimeout(res, POLL_INTERVAL));
     try {
-      const pr = await fetch(`/api/run/status/${jobId}`);
+      const pr = await fetch(`/api/run/status/${jobId}`, {credentials: 'same-origin'});
+      // Handle session expiry — now returns JSON 401 instead of HTML redirect
+      if (pr.status === 401) {
+        const errData = await pr.json().catch(() => ({}));
+        if (errData.error === 'session_expired') {
+          setOutput(outputId, 'Session expired — redirecting to login...');
+          setTimeout(() => window.location.href = '/login', 1000);
+        } else {
+          setOutput(outputId, 'Auth error: ' + pr.status);
+        }
+        break;
+      }
       if (!pr.ok) { setOutput(outputId, 'Polling error: ' + pr.status); break; }
       const pd = await pr.json();
       if (pd.output) setOutput(outputId, pd.output);

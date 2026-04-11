@@ -24,6 +24,9 @@ app.secret_key = os.environ.get("SECRET_KEY", "cf-secret-2026-usa-store")
 # Keep session alive for 30 days — prevents expiry during long DALL-E runs
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = True   # Required for HTTPS on Railway
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_NAME"] = "cf_session"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR  = os.path.join(BASE_DIR, "data")
@@ -43,6 +46,9 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("logged_in"):
+            # Return JSON 401 for API routes so the browser doesn't get redirected
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "session_expired", "redirect": "/login"}), 401
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated
