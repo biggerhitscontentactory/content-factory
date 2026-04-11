@@ -524,6 +524,16 @@ async function runBatch(mode, dryRun) {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({mode, count, dry_run: dryRun})
     });
+    // Handle session expiry — server returns redirect HTML instead of JSON
+    const contentType = r.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      setOutput(outputId, 'Session expired. Refreshing page...');
+      setTimeout(() => window.location.href = '/login', 1500);
+      hideSpinner(spinnerId);
+      disableBtns(false);
+      isRunning = false;
+      return;
+    }
     const d = await r.json();
     setOutput(outputId, d.output || 'Done');
 
@@ -671,8 +681,15 @@ async function runProductUrl() {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({mode:'ecommerce', count:1, dry_run:false, product_url:url})
     });
+    const contentType = r.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      setOutput('ec-output', 'Session expired. Refreshing...');
+      setTimeout(() => window.location.href = '/login', 1500);
+      hideSpinner('ec-spinner'); disableBtns(false); isRunning = false; return;
+    }
     const d = await r.json();
     setOutput('ec-output', d.output || 'Done');
+    if (d.preview && d.preview.length > 0) renderPreviewGallery(d.preview);
     loadStats();
   } catch(e) { setOutput('ec-output', 'Error: ' + e.message); }
   hideSpinner('ec-spinner');
