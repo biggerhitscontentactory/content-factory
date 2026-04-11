@@ -123,15 +123,24 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
                 pins = content_pack.get("pinterest_pins", [])
                 ig   = content_pack.get("instagram_caption", "")
                 fb   = content_pack.get("facebook_post", "")
+                # Handle fb being either a dict or string
+                if isinstance(fb, dict):
+                    fb_text = fb.get("caption", fb.get("text", fb.get("post", str(fb))))
+                else:
+                    fb_text = str(fb) if fb else ""
+                if isinstance(ig, dict):
+                    ig_text = ig.get("caption", ig.get("text", str(ig)))
+                else:
+                    ig_text = str(ig) if ig else ""
                 print(f"\n[Runner] DRY RUN PREVIEW:")
                 print(f"[Runner] Would post: {len(pins)} Pinterest pins, 1 Instagram, 1 Facebook")
                 for j, pin in enumerate(pins[:2], 1):
                     print(f"\n  Pinterest Pin {j}: {pin.get('title', '')}")
                     print(f"  Description: {pin.get('description', '')[:120]}...")
-                if ig:
-                    print(f"\n  Instagram Caption:\n  {ig[:200]}...")
-                if fb:
-                    print(f"\n  Facebook Post:\n  {fb[:200]}...")
+                if ig_text:
+                    print(f"\n  Instagram Caption:\n  {ig_text[:200]}...")
+                if fb_text:
+                    print(f"\n  Facebook Post:\n  {fb_text[:200]}...")
 
             # Save content pack
             out_dir = os.path.join(OUTPUT_DIR_ECOMMERCE, product.get("handle", f"product_{i}"))
