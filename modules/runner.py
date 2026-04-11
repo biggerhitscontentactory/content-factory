@@ -30,8 +30,11 @@ for _d in ["data", "logs", "output/ecommerce", "output/ai_channel"]:
 # ─── Imports ──────────────────────────────────────────────────────────────────
 from shopify_connector import get_product_by_url, extract_product_data
 from content_engine import generate_ecommerce_content_pack, generate_ai_channel_content_pack
-from image_generator import generate_ecommerce_images
-from carousel_generator import generate_carousel_pdf
+from image_generator import generate_product_images
+try:
+    from carousel_generator import generate_carousel_pdf
+except ImportError:
+    generate_carousel_pdf = None
 from scheduler import (
     schedule_ecommerce_content_pack, schedule_ai_channel_content_pack,
     log_scheduled_posts, get_daily_summary, load_daily_counts, get_oneup_accounts
@@ -59,6 +62,14 @@ ACCOUNT_IDS = {
 
 
 # ─── Ecommerce Batch ──────────────────────────────────────────────────────────
+def _relative_output_path(abs_path: str) -> str:
+    """Convert absolute output path to a web-accessible relative path."""
+    if abs_path.startswith(BASE_DIR):
+        rel = abs_path[len(BASE_DIR):].lstrip("/")
+        return rel
+    return abs_path
+
+
 def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
     load_daily_counts()
 
@@ -70,6 +81,7 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
 
     processed = 0
     errors = 0
+    preview_items = []   # Structured output for dashboard rendering
 
     for i in range(count):
         # Get product
@@ -87,6 +99,7 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
                 break
 
         title = product.get("title", "Unknown")
+        handle = product.get("handle", f"product_{i}")
         print(f"\n[{i+1}/{count}] Processing: {title[:60]}")
         print(f"         Tier: {product.get('tier', 3)} | Price: ${product.get('price', 0)}")
 
@@ -99,17 +112,15 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
                 errors += 1
                 continue
 
-            # Generate images (skip in dry run)
-            images = {}
-            if not dry_run:
-                print("[Runner] Generating images...")
-                handle = product.get("handle", f"product_{i}")
-                out_dir = os.path.join(OUTPUT_DIR_ECOMMERCE, handle)
-                os.makedirs(out_dir, exist_ok=True)
-                images = generate_ecommerce_images(content_pack, handle, out_dir)
-                print(f"[Runner] Generated {len([v for v in images.values() if v])} images")
+            # Generate images — in BOTH dry run and live run
+            print("[Runner] Generating images with DALL-E 3...")
+            out_dir = os.path.join(OUTPUT_DIR_ECOMMERCE, handle)
+            os.makedirs(out_dir, exist_ok=True)
+            images = generate_product_images(product, content_pack, out_dir, dry_run=dry_run)
+            total_imgs = sum(len(v) for v in images.values() if v)
+            print(f"[Runner] Generated {total_imgs} images")
 
-            # Schedule posts
+            # Schedule posts (live only)
             scheduled = {}
             if not dry_run:
                 print("[Runner] Scheduling posts via OneUp...")
@@ -119,32 +130,60 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
                 log_scheduled_posts(scheduled, title, "ecommerce")
                 print(f"[Runner] Scheduled {len(scheduled)} posts")
                 mark_product_posted(product.get("id", ""), len(scheduled))
-            else:
-                pins = content_pack.get("pinterest_pins", [])
-                ig   = content_pack.get("instagram_caption", "")
-                fb   = content_pack.get("facebook_post", "")
-                # Handle fb being either a dict or string
-                if isinstance(fb, dict):
-                    fb_text = fb.get("caption", fb.get("text", fb.get("post", str(fb))))
-                else:
-                    fb_text = str(fb) if fb else ""
-                if isinstance(ig, dict):
-                    ig_text = ig.get("caption", ig.get("text", str(ig)))
-                else:
-                    ig_text = str(ig) if ig else ""
-                print(f"\n[Runner] DRY RUN PREVIEW:")
-                print(f"[Runner] Would post: {len(pins)} Pinterest pins, 1 Instagram, 1 Facebook")
-                for j, pin in enumerate(pins[:2], 1):
-                    print(f"\n  Pinterest Pin {j}: {pin.get('title', '')}")
-                    print(f"  Description: {pin.get('description', '')[:120]}...")
-                if ig_text:
-                    print(f"\n  Instagram Caption:\n  {ig_text[:200]}...")
-                if fb_text:
-                    print(f"\n  Facebook Post:\n  {fb_text[:200]}...")
+
+            # Build preview item for dashboard
+            pins = content_pack.get("pinterest_pins", [])
+            ig_post = content_pack.get("instagram_post", {})
+            fb_post = content_pack.get("facebook_post", {})
+            ig_caption = ig_post.get("caption", "") if isinstance(ig_post, dict) else str(ig_post)
+            ig_hashtags = ig_post.get("hashtags", "") if isinstance(ig_post, dict) else ""
+            fb_text = fb_post.get("text", "") if isinstance(fb_post, dict) else str(fb_post)
+
+            # Convert absolute image paths to relative web paths
+            web_images = {}
+            for platform, paths in images.items():
+                web_images[platform] = [_relative_output_path(p) for p in paths]
+
+            preview_item = {
+                "title": title,
+                "handle": handle,
+                "tier": product.get("tier", 3),
+                "price": product.get("price", 0),
+                "images": web_images,
+                "pinterest_pins": [
+                    {
+                        "title": p.get("title", ""),
+                        "description": p.get("description", "")[:200],
+                    }
+                    for p in pins[:3]
+                ],
+                "instagram": {
+                    "caption": ig_caption[:300],
+                    "hashtags": ig_hashtags[:200],
+                },
+                "facebook": {
+                    "text": fb_text[:300],
+                },
+                "scheduled": len(scheduled),
+                "dry_run": dry_run,
+            }
+            preview_items.append(preview_item)
+
+            # Human-readable output for logs
+            print(f"\n[Runner] {'DRY RUN' if dry_run else 'LIVE'} PREVIEW:")
+            print(f"  Pinterest Pins: {len(pins)}")
+            for j, pin in enumerate(pins[:2], 1):
+                print(f"    Pin {j}: {pin.get('title', '')[:70]}")
+            if ig_caption:
+                print(f"  Instagram: {ig_caption[:120]}...")
+            if fb_text:
+                print(f"  Facebook: {fb_text[:120]}...")
+            print(f"  Images generated: {total_imgs}")
+            for plat, paths in web_images.items():
+                for p in paths:
+                    print(f"    [{plat}] {p}")
 
             # Save content pack
-            out_dir = os.path.join(OUTPUT_DIR_ECOMMERCE, product.get("handle", f"product_{i}"))
-            os.makedirs(out_dir, exist_ok=True)
             with open(os.path.join(out_dir, "content_pack.json"), "w") as f:
                 json.dump(content_pack, f, indent=2)
 
@@ -168,6 +207,13 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
     print(f"BATCH COMPLETE: {processed} processed, {errors} errors")
     print(f"Daily post status: {get_daily_summary()}")
     print(f"{'='*60}\n")
+
+    # Emit structured JSON block for dashboard parsing
+    if preview_items:
+        print("__PREVIEW_JSON_START__")
+        print(json.dumps(preview_items, indent=2))
+        print("__PREVIEW_JSON_END__")
+
     return processed, errors
 
 
@@ -248,8 +294,12 @@ def run_ai_channel_batch(dry_run=False):
                 topic_slug = "".join(c for c in topic[:30].lower().replace(" ", "_") if c.isalnum() or c == "_")
                 out_dir = os.path.join(OUTPUT_DIR_AI_CHANNEL, topic_slug)
                 os.makedirs(out_dir, exist_ok=True)
-                pdf_path = generate_carousel_pdf(content_pack, topic_slug, out_dir)
-                print(f"[Runner] Carousel saved: {pdf_path}")
+                if generate_carousel_pdf:
+                    pdf_path = generate_carousel_pdf(content_pack, topic_slug, out_dir)
+                    print(f"[Runner] Carousel saved: {pdf_path}")
+                else:
+                    pdf_path = ""
+                    print("[Runner] Carousel generator not available")
 
                 print("[Runner] Scheduling via OneUp...")
                 scheduled = schedule_ai_channel_content_pack(

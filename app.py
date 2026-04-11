@@ -13,8 +13,9 @@ import threading
 import hashlib
 from datetime import datetime
 from functools import wraps
+import re
 from flask import (Flask, render_template, request, jsonify,
-                   redirect, url_for, session, flash)
+                   redirect, url_for, session, flash, send_from_directory)
 
 # ─── App Setup ────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -181,11 +182,28 @@ def api_run():
             "summary": output[-200:] if output else ""
         })
 
-        return jsonify({"output": output, "success": result.returncode == 0})
+        # Parse structured preview JSON if present
+        preview_data = None
+        if "__PREVIEW_JSON_START__" in output:
+            try:
+                start = output.index("__PREVIEW_JSON_START__") + len("__PREVIEW_JSON_START__")
+                end = output.index("__PREVIEW_JSON_END__")
+                json_str = output[start:end].strip()
+                preview_data = json.loads(json_str)
+                # Remove the JSON block from the log output
+                output = output[:output.index("__PREVIEW_JSON_START__")].strip()
+            except Exception as pe:
+                pass  # If parsing fails, just show raw output
+
+        return jsonify({
+            "output": output,
+            "success": result.returncode == 0,
+            "preview": preview_data,
+        })
     except subprocess.TimeoutExpired:
-        return jsonify({"output": "Timed out after 3 minutes", "success": False})
+        return jsonify({"output": "Timed out after 3 minutes", "success": False, "preview": None})
     except Exception as e:
-        return jsonify({"output": f"Error: {str(e)}", "success": False})
+        return jsonify({"output": f"Error: {str(e)}", "success": False, "preview": None})
 
 
 # ─── API: Rebuild Queue ───────────────────────────────────────────────────────
@@ -303,6 +321,18 @@ def api_config_status():
         "oneup_facebook": bool(os.environ.get("ONEUP_FACEBOOK_ID")),
         "oneup_linkedin": bool(os.environ.get("ONEUP_LINKEDIN_ID")),
     })
+
+
+# ─── Serve Generated Output Images ──────────────────────────────────────────
+@app.route("/output/<path:filepath>")
+@login_required
+def serve_output(filepath):
+    """Serve generated images from the output directory."""
+    output_dir = os.path.join(BASE_DIR, "output")
+    # Security: only allow image files
+    if not filepath.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
+        return "Not allowed", 403
+    return send_from_directory(output_dir, filepath)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

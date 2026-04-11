@@ -1,211 +1,424 @@
 """
 Content Factory - Image Generator
-=====================================
-Generates platform-optimized images using DALL-E 3.
-Supports Pinterest vertical, Instagram square, Facebook landscape, and LinkedIn formats.
-Falls back to downloading the product's own Shopify image when generation fails.
+====================================
+Generates platform-ready images using DALL-E 3 (lifestyle scenes matching
+OfficialUSAStore.com Pinterest style), then adds text overlays via PIL.
+
+Pinterest style:
+  - Patriotic lifestyle scenes (backyard parties, product flatlays, family gatherings)
+  - Bold headline text at top (dark navy on white bar) OR overlaid on image
+  - OfficialUSAStore.com watermark bottom-right
+  - Red/white/blue color palette, gold stars, mini flags as props
+
+Platform specs:
+  Pinterest  : 1000 x 1500 px (2:3 vertical)  — 3 pins per product, DALL-E
+  Instagram  : 1080 x 1080 px (1:1 square)    — 1 image, DALL-E, minimal text
+  Facebook   : 1200 x 630  px (landscape)     — cropped from Instagram image
 """
 
 import os
-import re
+import io
 import time
+import base64
 import requests
-from openai import OpenAI
-from config import OPENAI_API_KEY, OPENAI_BASE_URL, OUTPUT_DIR_ECOMMERCE, OUTPUT_DIR_AI_CHANNEL
+from PIL import Image, ImageDraw, ImageFont
+from datetime import datetime
 
-client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+# ─── Brand Colors ─────────────────────────────────────────────────────────────
+COLOR_NAVY   = (15,  30,  70)
+COLOR_RED    = (178, 34,  52)
+COLOR_WHITE  = (255, 255, 255)
+COLOR_GOLD   = (212, 175, 55)
+COLOR_CREAM  = (255, 253, 240)
 
-# ─── Image size specs per platform ────────────────────────────────────────────
-IMAGE_SIZES = {
-    "pinterest":   "1024x1792",   # vertical 2:3 (closest DALL-E supports)
-    "instagram":   "1024x1024",   # square
-    "facebook":    "1792x1024",   # landscape
-    "linkedin":    "1792x1024",   # landscape
-    "thumbnail":   "1792x1024",   # landscape for video thumbnails
-    "square":      "1024x1024",
-    "vertical":    "1024x1792",
-    "landscape":   "1792x1024",
+# ─── Platform Specs ───────────────────────────────────────────────────────────
+PLATFORM_SPECS = {
+    "pinterest": {"size": (1000, 1500), "dalle_size": "1024x1792"},
+    "instagram": {"size": (1080, 1080), "dalle_size": "1024x1024"},
+    "facebook":  {"size": (1200, 630)},
 }
 
-# ─── Safety wrapper for DALL-E prompts ────────────────────────────────────────
-DALLE_SAFETY_PREFIX = (
-    "Professional product photography style. "
-    "Clean, vibrant, commercial quality. "
-    "No text overlays. No people's faces. "
-    "Patriotic American aesthetic. "
-)
-
-def sanitize_prompt(prompt):
-    """Remove any potentially flagged terms from DALL-E prompts."""
-    # Remove overly political terms that might trigger content filters
-    safe = re.sub(r'\b(MAGA|Trump|Biden|political party|Democrat|Republican)\b', 
-                  'American', prompt, flags=re.IGNORECASE)
-    return safe[:900]  # DALL-E prompt limit
+# ─── Pinterest Content Angles (rotated per pin) ───────────────────────────────
+PIN_ANGLES = [
+    "patriotic backyard party scene with American flags, gold stars, red white blue confetti on white wood table",
+    "happy American family outdoors celebrating with patriotic decorations, warm golden sunset light",
+    "elegant product flatlay on white rustic wood surface surrounded by mini American flags, gold stars, red white blue ribbon",
+    "festive America 250th anniversary party setup with string lights, patriotic decor, 1776 neon sign",
+    "close-up lifestyle shot with patriotic props: confetti, small flags, gold coins, celebration atmosphere",
+]
 
 
-def generate_image(prompt, platform="instagram", output_dir=None, filename=None):
-    """
-    Generate a single image using DALL-E 3.
-    Returns local file path of saved image, or None on failure.
-    """
-    if output_dir is None:
-        output_dir = OUTPUT_DIR_ECOMMERCE
-    os.makedirs(output_dir, exist_ok=True)
+def get_openai_client():
+    """Get OpenAI client using environment variables."""
+    from openai import OpenAI
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    return OpenAI(api_key=api_key, base_url=base_url)
 
-    size = IMAGE_SIZES.get(platform, "1024x1024")
-    full_prompt = DALLE_SAFETY_PREFIX + sanitize_prompt(prompt)
 
+def get_font(size: int):
+    """Try to load a system bold font, fall back to default."""
+    font_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/usr/share/fonts/truetype/ubuntu/Ubuntu-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for path in font_paths:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
+
+
+def get_font_regular(size: int):
+    """Try to load a regular (non-bold) system font."""
+    font_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+    ]
+    for path in font_paths:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
+
+
+def wrap_text(text: str, font, max_width: int, draw) -> list:
+    """Wrap text to fit within max_width pixels."""
+    words = text.split()
+    lines = []
+    current = []
+    for word in words:
+        test = " ".join(current + [word])
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] > max_width and current:
+            lines.append(" ".join(current))
+            current = [word]
+        else:
+            current.append(word)
+    if current:
+        lines.append(" ".join(current))
+    return lines
+
+
+def smart_crop(img, target_w: int, target_h: int):
+    """Resize to fill target dimensions, then center-crop."""
+    src_w, src_h = img.size
+    target_ratio = target_w / target_h
+    src_ratio = src_w / src_h
+    if src_ratio > target_ratio:
+        new_h = target_h
+        new_w = int(src_w * (target_h / src_h))
+    else:
+        new_w = target_w
+        new_h = int(src_h * (target_w / src_w))
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+    left = (new_w - target_w) // 2
+    top  = (new_h - target_h) // 2
+    return img.crop((left, top, left + target_w, top + target_h))
+
+
+def download_image(url: str):
+    """Download image from URL and return as PIL Image."""
     try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, headers=headers, timeout=20)
+        resp.raise_for_status()
+        return Image.open(io.BytesIO(resp.content)).convert("RGB")
+    except Exception as e:
+        print(f"[ImageGen] Failed to download: {e}")
+        return None
+
+
+def generate_dalle_image(prompt: str, size: str = "1024x1792") -> Image.Image | None:
+    """Generate an image using DALL-E 3 and return as PIL Image."""
+    try:
+        client = get_openai_client()
+        print(f"[ImageGen] DALL-E 3 generating ({size})...")
         response = client.images.generate(
             model="dall-e-3",
-            prompt=full_prompt,
+            prompt=prompt,
             size=size,
             quality="standard",
             n=1,
+            response_format="b64_json"
         )
-        image_url = response.data[0].url
-
-        # Download the image
-        img_data = requests.get(image_url, timeout=30).content
-        if not filename:
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"{platform}_{timestamp}.png"
-        filepath = os.path.join(output_dir, filename)
-        with open(filepath, "wb") as f:
-            f.write(img_data)
-        print(f"[ImageGen] Saved {platform} image: {filepath}")
-        return filepath
-
+        img_data = base64.b64decode(response.data[0].b64_json)
+        return Image.open(io.BytesIO(img_data)).convert("RGB")
     except Exception as e:
-        print(f"[ImageGen] DALL-E error for {platform}: {e}")
+        print(f"[ImageGen] DALL-E error: {e}")
         return None
 
 
-def download_product_image(image_url, output_dir, filename):
+def build_pinterest_prompt(product: dict, pin_title: str, angle_idx: int) -> str:
+    """Build a DALL-E prompt matching OfficialUSAStore Pinterest style."""
+    title = product.get("title", "patriotic product")
+    price = product.get("price", "")
+    angle = PIN_ANGLES[angle_idx % len(PIN_ANGLES)]
+
+    # Leave white space at top for text overlay (about 20% of image height)
+    prompt = (
+        f"Vertical Pinterest pin image (2:3 ratio) for an American patriotic gift store. "
+        f"Scene: {angle}. "
+        f"The product featured is: {title}. "
+        f"Style: bright, clean, professional lifestyle photography. "
+        f"Color palette: red, white, navy blue, gold accents. "
+        f"Props: mini American flags, gold stars, red-white-blue confetti or ribbon. "
+        f"The top 20% of the image should be a clean white or very light area suitable for bold text overlay. "
+        f"Bottom right corner should have a small subtle watermark area. "
+        f"Photorealistic, high quality, warm inviting atmosphere. "
+        f"NO text, NO words, NO labels in the image itself."
+    )
+    return prompt
+
+
+def build_instagram_prompt(product: dict, image_prompt: str = "") -> str:
+    """Build a DALL-E prompt for Instagram square lifestyle image."""
+    title = product.get("title", "patriotic product")
+    base = image_prompt or f"patriotic lifestyle scene featuring {title}"
+
+    prompt = (
+        f"Square Instagram post image for an American patriotic gift store. "
+        f"Scene: {base}. "
+        f"Product: {title}. "
+        f"Style: beautiful lifestyle photography, emotional and aspirational. "
+        f"Color palette: red, white, navy blue, warm golden tones. "
+        f"Atmosphere: celebratory, patriotic, family-friendly. "
+        f"America 250th anniversary theme. "
+        f"Clean composition, the product is naturally present in the scene. "
+        f"Photorealistic, high quality. "
+        f"NO text, NO words, NO labels in the image."
+    )
+    return prompt
+
+
+def add_pinterest_overlay(img: Image.Image, headline: str, subtitle: str = "", price: str = "") -> Image.Image:
     """
-    Download a product's existing Shopify image as fallback.
+    Add Pinterest-style overlay matching OfficialUSAStore style:
+    - White bar at top with bold navy headline text
+    - Subtitle in smaller regular text below headline
+    - OfficialUSAStore.com watermark bottom-right
     """
-    os.makedirs(output_dir, exist_ok=True)
+    w, h = img.size
+    draw = ImageDraw.Draw(img)
+
+    # ── Top white bar with headline ──────────────────────────────────────────
+    bar_h = int(h * 0.22)  # ~22% of height for text area
+    # Draw white bar
+    draw.rectangle([(0, 0), (w, bar_h)], fill=COLOR_WHITE)
+
+    pad = int(w * 0.05)
+    text_w = w - pad * 2
+
+    # Headline font (bold, large)
+    headline_font = get_font(int(w * 0.085))
+    # Subtitle font (regular, smaller)
+    subtitle_font = get_font_regular(int(w * 0.042))
+
+    # Wrap and draw headline
+    headline_upper = headline.upper()
+    h_lines = wrap_text(headline_upper, headline_font, text_w, draw)
+
+    # Calculate total text block height
+    h_line_h = int(w * 0.092)
+    s_line_h = int(w * 0.048)
+    total_text_h = len(h_lines) * h_line_h + (s_line_h + 8 if subtitle else 0)
+
+    # Center vertically in bar
+    y = (bar_h - total_text_h) // 2
+    if y < 8:
+        y = 8
+
+    for line in h_lines:
+        bbox = draw.textbbox((0, 0), line, font=headline_font)
+        x = (w - (bbox[2] - bbox[0])) // 2
+        draw.text((x, y), line, font=headline_font, fill=COLOR_NAVY)
+        y += h_line_h
+
+    if subtitle:
+        bbox = draw.textbbox((0, 0), subtitle, font=subtitle_font)
+        x = (w - (bbox[2] - bbox[0])) // 2
+        draw.text((x, y + 4), subtitle, font=subtitle_font, fill=(80, 80, 100))
+
+    # ── Price badge (bottom-left of image area) ──────────────────────────────
+    if price:
+        price_font = get_font(int(w * 0.055))
+        pt = f"${price}"
+        pb = draw.textbbox((0, 0), pt, font=price_font)
+        pw = pb[2] - pb[0] + 24
+        ph = pb[3] - pb[1] + 14
+        bx = pad
+        by = h - int(h * 0.08) - ph
+        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=10, fill=COLOR_RED)
+        draw.text((bx + pw // 2, by + ph // 2), pt, font=price_font, fill=COLOR_WHITE, anchor="mm")
+
+    # ── Watermark bottom-right ────────────────────────────────────────────────
+    wm_font = get_font(int(w * 0.028))
+    wm_text = "OfficialUSAStore.com"
+    wb = draw.textbbox((0, 0), wm_text, font=wm_font)
+    wm_w = wb[2] - wb[0]
+    # Semi-transparent background for readability
+    wm_x = w - pad - wm_w
+    wm_y = h - int(h * 0.025)
+    # Draw with shadow for visibility
+    draw.text((wm_x + 1, wm_y + 1), wm_text, font=wm_font, fill=(0, 0, 0, 120))
+    draw.text((wm_x, wm_y), wm_text, font=wm_font, fill=COLOR_WHITE, anchor="lb")
+
+    return img
+
+
+def add_instagram_overlay(img: Image.Image, price: str = "") -> Image.Image:
+    """
+    Add minimal Instagram overlay:
+    - Thin navy bar at bottom with OfficialUSAStore.com
+    - Optional price badge
+    """
+    w, h = img.size
+    draw = ImageDraw.Draw(img)
+
+    # Bottom navy bar
+    bar_h = int(h * 0.07)
+    draw.rectangle([(0, h - bar_h), (w, h)], fill=COLOR_NAVY)
+
+    url_font = get_font(int(w * 0.032))
+    draw.text((w // 2, h - bar_h // 2), "OfficialUSAStore.com",
+              font=url_font, fill=COLOR_GOLD, anchor="mm")
+
+    # Price badge top-right
+    if price:
+        price_font = get_font(int(w * 0.055))
+        pt = f"${price}"
+        pb = draw.textbbox((0, 0), pt, font=price_font)
+        pw = pb[2] - pb[0] + 24
+        ph = pb[3] - pb[1] + 14
+        pad = int(w * 0.04)
+        bx = w - pad - pw
+        by = pad
+        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=10, fill=COLOR_RED)
+        draw.text((bx + pw // 2, by + ph // 2), pt, font=price_font, fill=COLOR_WHITE, anchor="mm")
+
+    return img
+
+
+def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry_run: bool = False) -> dict:
+    """
+    Main entry point: generate all platform images for a product using DALL-E 3.
+    Returns dict of {platform: [image_path, ...]}
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    results = {}
+
+    title = product.get("title", "Unknown Product")
+    price = str(product.get("price", ""))
+    pins  = content_pack.get("pinterest_pins", [])
+
+    # ── Pinterest Pins (DALL-E 3, vertical) ──────────────────────────────────
+    pin_images = []
+    num_pins = min(3, len(pins)) if pins else 3
+
+    for i in range(num_pins):
+        pin = pins[i] if i < len(pins) else {}
+        pin_title = pin.get("title", f"Shop {title}")
+        # Use the image_prompt from content engine if available, else build one
+        dalle_prompt = pin.get("image_prompt") or build_pinterest_prompt(product, pin_title, i)
+
+        print(f"[ImageGen] Generating Pinterest pin {i+1}/{num_pins}...")
+        img = generate_dalle_image(dalle_prompt, size="1024x1792")
+
+        if img is None:
+            # Fallback: use product image from Shopify
+            print(f"[ImageGen] DALL-E failed for pin {i+1}, trying product image fallback...")
+            images = product.get("images", [])
+            if images:
+                url = images[0] if isinstance(images[0], str) else images[0].get("src", "")
+                img = download_image(url)
+            if img is None:
+                print(f"[ImageGen] No fallback image available for pin {i+1}")
+                continue
+
+        # Resize to Pinterest spec
+        img = smart_crop(img, *PLATFORM_SPECS["pinterest"]["size"])
+
+        # Add overlay
+        subtitle = pin.get("description", "")[:60] if pin else ""
+        img = add_pinterest_overlay(img, pin_title, subtitle=subtitle, price=price)
+
+        path = os.path.join(out_dir, f"pinterest_{i+1}.jpg")
+        img.save(path, "JPEG", quality=92)
+        pin_images.append(path)
+        print(f"[ImageGen] ✓ Pinterest pin {i+1} saved: {path}")
+
+        # Small delay between DALL-E calls
+        if i < num_pins - 1:
+            time.sleep(2)
+
+    results["pinterest"] = pin_images
+
+    # ── Instagram (DALL-E 3, square) ─────────────────────────────────────────
+    print(f"[ImageGen] Generating Instagram image...")
+    ig_data = content_pack.get("instagram_post", {})
+    if isinstance(ig_data, dict):
+        ig_prompt = ig_data.get("image_prompt", "")
+    else:
+        ig_prompt = ""
+
+    ig_dalle_prompt = build_instagram_prompt(product, ig_prompt)
+    ig_img = generate_dalle_image(ig_dalle_prompt, size="1024x1024")
+
+    if ig_img is None:
+        # Fallback: use first Pinterest image cropped to square
+        if pin_images:
+            ig_img = Image.open(pin_images[0]).convert("RGB")
+        else:
+            images = product.get("images", [])
+            if images:
+                url = images[0] if isinstance(images[0], str) else images[0].get("src", "")
+                ig_img = download_image(url)
+
+    if ig_img:
+        ig_img = smart_crop(ig_img, *PLATFORM_SPECS["instagram"]["size"])
+        ig_img = add_instagram_overlay(ig_img, price=price)
+        ig_path = os.path.join(out_dir, "instagram.jpg")
+        ig_img.save(ig_path, "JPEG", quality=92)
+        results["instagram"] = [ig_path]
+        print(f"[ImageGen] ✓ Instagram saved: {ig_path}")
+
+        # ── Facebook (crop from Instagram image) ─────────────────────────────
+        fb_img = smart_crop(ig_img.copy(), *PLATFORM_SPECS["facebook"]["size"])
+        fb_path = os.path.join(out_dir, "facebook.jpg")
+        fb_img.save(fb_path, "JPEG", quality=92)
+        results["facebook"] = [fb_path]
+        print(f"[ImageGen] ✓ Facebook saved: {fb_path}")
+
+    return results
+
+
+# ─── Legacy wrappers ──────────────────────────────────────────────────────────
+def generate_ecommerce_images(content_pack: dict, product_handle: str,
+                               output_dir: str = None, dry_run: bool = False) -> dict:
+    """Legacy wrapper — reads product from content_pack['product']."""
     try:
-        resp = requests.get(image_url, timeout=15)
-        resp.raise_for_status()
-        filepath = os.path.join(output_dir, filename)
-        with open(filepath, "wb") as f:
-            f.write(resp.content)
-        print(f"[ImageGen] Downloaded product image: {filepath}")
-        return filepath
-    except Exception as e:
-        print(f"[ImageGen] Failed to download product image: {e}")
-        return None
+        from config import OUTPUT_DIR_ECOMMERCE
+    except ImportError:
+        OUTPUT_DIR_ECOMMERCE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "output", "ecommerce")
 
-
-def generate_ecommerce_images(content_pack, product_handle, output_dir=None):
-    """
-    Generate all images for an ecommerce content pack.
-    Returns dict of platform -> local file path.
-    """
     if output_dir is None:
         output_dir = os.path.join(OUTPUT_DIR_ECOMMERCE, product_handle)
-    os.makedirs(output_dir, exist_ok=True)
-
-    images = {}
-    image_prompts = content_pack.get("image_prompts", {})
-    pins = content_pack.get("pinterest_pins", [])
-    ig = content_pack.get("instagram_post", {})
-    fb = content_pack.get("facebook_post", {})
-
-    # Pinterest pin 1 (vertical)
-    if pins and pins[0].get("image_prompt"):
-        path = generate_image(
-            pins[0]["image_prompt"], platform="pinterest",
-            output_dir=output_dir, filename="pinterest_pin1.png"
-        )
-        images["pinterest_1"] = path
-        time.sleep(2)  # rate limit between DALL-E calls
-
-    # Pinterest pin 2 (vertical) - use pin 2 prompt or lifestyle prompt
-    if len(pins) > 1 and pins[1].get("image_prompt"):
-        path = generate_image(
-            pins[1]["image_prompt"], platform="pinterest",
-            output_dir=output_dir, filename="pinterest_pin2.png"
-        )
-        images["pinterest_2"] = path
-        time.sleep(2)
-
-    # Instagram square
-    if ig.get("image_prompt"):
-        path = generate_image(
-            ig["image_prompt"], platform="instagram",
-            output_dir=output_dir, filename="instagram.png"
-        )
-        images["instagram"] = path
-        time.sleep(2)
-
-    # Facebook landscape
-    if fb.get("image_prompt"):
-        path = generate_image(
-            fb["image_prompt"], platform="facebook",
-            output_dir=output_dir, filename="facebook.png"
-        )
-        images["facebook"] = path
-        time.sleep(2)
-
-    # Fallback: use product's own image if any generation failed
     product = content_pack.get("product", {})
-    primary_image = product.get("primary_image", "")
-    if primary_image:
-        for platform in ["pinterest_1", "instagram", "facebook"]:
-            if not images.get(platform):
-                path = download_product_image(
-                    primary_image, output_dir, f"{platform}_fallback.jpg"
-                )
-                images[platform] = path
-
-    return images
+    if not product:
+        print("[ImageGen] No product data in content_pack")
+        return {}
+    return generate_product_images(product, content_pack, output_dir, dry_run=dry_run)
 
 
-def generate_ai_channel_images(content_pack, topic_slug, output_dir=None):
-    """
-    Generate images for an AI channel content pack (LinkedIn + Twitter).
-    """
-    if output_dir is None:
-        output_dir = os.path.join(OUTPUT_DIR_AI_CHANNEL, topic_slug)
-    os.makedirs(output_dir, exist_ok=True)
-
-    images = {}
-    image_prompts = content_pack.get("image_prompts", {})
-
-    # LinkedIn header image
-    if image_prompts.get("linkedin_header"):
-        path = generate_image(
-            image_prompts["linkedin_header"], platform="linkedin",
-            output_dir=output_dir, filename="linkedin_header.png"
-        )
-        images["linkedin_header"] = path
-        time.sleep(2)
-
-    # Carousel cover
-    if image_prompts.get("carousel_cover"):
-        path = generate_image(
-            image_prompts["carousel_cover"], platform="linkedin",
-            output_dir=output_dir, filename="carousel_cover.png"
-        )
-        images["carousel_cover"] = path
-
-    return images
-
-
-if __name__ == "__main__":
-    # Quick test
-    print("Testing image generation...")
-    path = generate_image(
-        "A beautiful patriotic American garden flag waving in a sunny backyard, "
-        "red white and blue colors, 4th of July decorations, warm summer light",
-        platform="instagram",
-        output_dir="/home/ubuntu/content-factory/output/ecommerce",
-        filename="test_image.png"
-    )
-    if path:
-        print(f"✓ Image saved to: {path}")
-    else:
-        print("✗ Image generation failed")
+def generate_ai_channel_images(content_pack: dict, topic_slug: str, output_dir: str = None) -> dict:
+    """AI channel images — not needed for this product-based approach."""
+    return {}
