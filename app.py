@@ -176,17 +176,54 @@ def api_stats():
         return jsonify({"error": str(e)})
 
 
-# ─── Async Job Store ─────────────────────────────────────────────────────────
-# In-memory job store: {job_id: {status, output, preview, ...}}
-_jobs = {}
+# ─── File-based Job Store ─────────────────────────────────────────────────────
+# Jobs are persisted to disk so polling works even if Railway spawns a new
+# process instance between the POST /api/run and GET /api/run/status calls.
+JOBS_DIR = os.path.join(DATA_DIR, "jobs")
+os.makedirs(JOBS_DIR, exist_ok=True)
 _jobs_lock = threading.Lock()
 
 
-def _run_job_worker(job_id, cmd, mode, count, dry_run):
-    """Background thread: runs subprocess and streams output to job store."""
+def _job_path(job_id):
+    return os.path.join(JOBS_DIR, f"{job_id}.json")
+
+
+def _read_job(job_id):
+    try:
+        with open(_job_path(job_id), "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _write_job(job_id, data):
     with _jobs_lock:
-        _jobs[job_id]["status"] = "running"
-        _jobs[job_id]["output"] = "Starting..."
+        try:
+            with open(_job_path(job_id), "w") as f:
+                json.dump(data, f)
+        except Exception:
+            pass
+
+
+def _update_job(job_id, updates):
+    with _jobs_lock:
+        try:
+            path = _job_path(job_id)
+            try:
+                with open(path, "r") as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+            data.update(updates)
+            with open(path, "w") as f:
+                json.dump(data, f)
+        except Exception:
+            pass
+
+
+def _run_job_worker(job_id, cmd, mode, count, dry_run):
+    """Background thread: runs subprocess and streams output to job file."""
+    _update_job(job_id, {"status": "running", "output": "Starting..."})
 
     try:
         proc = subprocess.Popen(
@@ -198,8 +235,7 @@ def _run_job_worker(job_id, cmd, mode, count, dry_run):
         for line in proc.stdout:
             lines.append(line.rstrip())
             visible = [l for l in lines if not l.startswith("__")]
-            with _jobs_lock:
-                _jobs[job_id]["output"] = "\n".join(visible[-80:])
+            _update_job(job_id, {"output": "\n".join(visible[-80:])})
 
         proc.wait()
         output = "\n".join(lines)
@@ -225,24 +261,22 @@ def _run_job_worker(job_id, cmd, mode, count, dry_run):
             "summary": output[-200:] if output else ""
         })
 
-        with _jobs_lock:
-            _jobs[job_id].update({
-                "status": "done",
-                "output": output,
-                "preview": preview_data,
-                "success": success,
-                "finished_at": datetime.now().isoformat(),
-            })
+        _update_job(job_id, {
+            "status": "done",
+            "output": output,
+            "preview": preview_data,
+            "success": success,
+            "finished_at": datetime.now().isoformat(),
+        })
 
     except Exception as e:
-        with _jobs_lock:
-            _jobs[job_id].update({
-                "status": "error",
-                "output": f"Job error: {str(e)}",
-                "preview": None,
-                "success": False,
-                "finished_at": datetime.now().isoformat(),
-            })
+        _update_job(job_id, {
+            "status": "error",
+            "output": f"Job error: {str(e)}",
+            "preview": None,
+            "success": False,
+            "finished_at": datetime.now().isoformat(),
+        })
 
 
 # ─── API: Run Batch (async) ───────────────────────────────────────────────────
@@ -263,18 +297,17 @@ def api_run():
         cmd.extend(["--product-url", product_url])
 
     job_id = str(uuid.uuid4())[:8]
-    with _jobs_lock:
-        _jobs[job_id] = {
-            "status": "queued",
-            "output": "Queued...",
-            "preview": None,
-            "success": None,
-            "started_at": datetime.now().isoformat(),
-            "finished_at": None,
-            "mode": mode,
-            "count": count,
-            "dry_run": dry_run,
-        }
+    _write_job(job_id, {
+        "status": "queued",
+        "output": "Queued...",
+        "preview": None,
+        "success": None,
+        "started_at": datetime.now().isoformat(),
+        "finished_at": None,
+        "mode": mode,
+        "count": count,
+        "dry_run": dry_run,
+    })
 
     t = threading.Thread(target=_run_job_worker,
                          args=(job_id, cmd, mode, count, dry_run),
@@ -286,15 +319,14 @@ def api_run():
 @app.route("/api/run/status/<job_id>")
 @login_required
 def api_run_status(job_id):
-    """Poll job status — returns live output + final preview when done."""
-    with _jobs_lock:
-        job = dict(_jobs.get(job_id, {}))
+    """Poll job status — reads from disk so it works across Railway process instances."""
+    job = _read_job(job_id)
     if not job:
-        return jsonify({"error": "Job not found"}), 404
+        return jsonify({"error": "Job not found", "job_id": job_id}), 404
     return jsonify({
         "job_id": job_id,
-        "status": job["status"],
-        "output": job["output"],
+        "status": job.get("status", "unknown"),
+        "output": job.get("output", ""),
         "preview": job.get("preview"),
         "success": job.get("success"),
         "finished_at": job.get("finished_at"),
