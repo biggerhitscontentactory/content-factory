@@ -210,15 +210,15 @@ def add_pinterest_overlay(img: Image.Image, headline: str, subtitle: str = "", p
     w, h = img.size
     draw = ImageDraw.Draw(img)
 
-    pad = int(w * 0.05)
+    pad = int(w * 0.04)
     text_w = w - pad * 2
 
-    # ── Font sizes: much larger for readability ──────────────────────────────
-    # On a 1000px wide pin: headline=130px, subtitle=72px, price=90px, watermark=52px
-    headline_size = int(w * 0.13)   # was 0.085 — now ~53% bigger
-    subtitle_size = int(w * 0.072)  # was 0.042 — now ~71% bigger
-    price_size    = int(w * 0.09)   # was 0.055 — now ~64% bigger
-    wm_size       = int(w * 0.052)  # was 0.028 — now ~86% bigger
+    # ── Font sizes: large and bold for readability ───────────────────────────
+    # On a 1000px wide pin: headline=110px, subtitle=68px, price=72px, watermark=44px
+    headline_size = int(w * 0.11)   # 110px — bold and readable, fits 3-4 words per line
+    subtitle_size = int(w * 0.068)  # 68px  — clearly readable
+    price_size    = int(w * 0.072)  # 72px  — bold badge
+    wm_size       = int(w * 0.044)  # 44px  — visible watermark
 
     headline_font = get_font(headline_size)
     subtitle_font = get_font_regular(subtitle_size)
@@ -227,19 +227,19 @@ def add_pinterest_overlay(img: Image.Image, headline: str, subtitle: str = "", p
     headline_upper = headline.upper()
     h_lines = wrap_text(headline_upper, headline_font, text_w, draw)
 
-    h_line_h = int(headline_size * 1.15)  # line height with spacing
-    s_line_h = int(subtitle_size * 1.2)
-    total_text_h = len(h_lines) * h_line_h + (s_line_h + 12 if subtitle else 0)
+    h_line_h = int(headline_size * 1.2)   # line height with spacing
+    s_line_h = int(subtitle_size * 1.25)
+    total_text_h = len(h_lines) * h_line_h
 
     # Pre-measure subtitle lines so bar height accounts for them
     s_lines_preview = []
     if subtitle:
         s_lines_preview = wrap_text(subtitle, subtitle_font, text_w, draw)[:2]
-        total_text_h += len(s_lines_preview) * s_line_h + 12
+        total_text_h += len(s_lines_preview) * s_line_h + int(h * 0.01)
 
-    # Bar height: text block + generous top/bottom padding
-    bar_h = total_text_h + int(h * 0.07)
-    bar_h = max(bar_h, int(h * 0.22))  # minimum 22% of image height
+    # Bar height: must contain ALL text — no cap, expands as needed
+    bar_h = total_text_h + int(h * 0.04)   # top+bottom padding
+    bar_h = max(bar_h, int(h * 0.14))       # minimum 14%
 
     # Draw white bar
     draw.rectangle([(0, 0), (w, bar_h)], fill=COLOR_WHITE)
@@ -259,15 +259,14 @@ def add_pinterest_overlay(img: Image.Image, headline: str, subtitle: str = "", p
         draw.text((x + 2, y + 2), line, font=headline_font, fill=(180, 180, 200))
         draw.text((x, y), line, font=headline_font, fill=COLOR_NAVY)
         y += h_line_h
-
     # ── Draw subtitle ────────────────────────────────────────────────────────
     if subtitle:
-        # Truncate subtitle to fit on 2 lines max (already measured above)
         s_lines = s_lines_preview if s_lines_preview else wrap_text(subtitle, subtitle_font, text_w, draw)[:2]
         for sline in s_lines:
             bbox = draw.textbbox((0, 0), sline, font=subtitle_font)
-            x = (w - (bbox[2] - bbox[0])) // 2
-            draw.text((x, y + 6), sline, font=subtitle_font, fill=(60, 60, 90))
+            lw = bbox[2] - bbox[0]
+            x = (w - lw) // 2
+            draw.text((x, y), sline, font=subtitle_font, fill=(60, 60, 90))
             y += s_line_h
 
     # ── Price badge (bottom-left, large and bold) ────────────────────────────
@@ -309,33 +308,62 @@ def add_pinterest_overlay(img: Image.Image, headline: str, subtitle: str = "", p
     return img
 
 
-def add_instagram_overlay(img: Image.Image, price: str = "") -> Image.Image:
+def add_instagram_overlay(img: Image.Image, headline: str = "", price: str = "") -> Image.Image:
     """
-    Add minimal Instagram overlay:
-    - Thin navy bar at bottom with OfficialUSAStore.com
-    - Optional price badge
+    Add Instagram overlay:
+    - White bar at top with bold headline (same style as Pinterest)
+    - Bottom navy bar with OfficialUSAStore.com
+    - Optional price badge top-right
     """
     w, h = img.size
     draw = ImageDraw.Draw(img)
+    pad = int(w * 0.04)
+    text_w = w - pad * 2
 
-    # Bottom navy bar
-    bar_h = int(h * 0.07)
-    draw.rectangle([(0, h - bar_h), (w, h)], fill=COLOR_NAVY)
+    # ── Top headline bar (if headline provided) ──────────────────────────────
+    top_bar_h = 0
+    if headline:
+        headline_size = int(w * 0.085)  # 92px on 1080px — fits 4-5 words per line
+        headline_font = get_font(headline_size)
+        h_lines = wrap_text(headline.upper(), headline_font, text_w, draw)
+        h_line_h = int(headline_size * 1.2)
+        top_bar_h = len(h_lines) * h_line_h + int(h * 0.04)
+        top_bar_h = max(top_bar_h, int(h * 0.12))
 
-    url_font = get_font(int(w * 0.032))
-    draw.text((w // 2, h - bar_h // 2), "OfficialUSAStore.com",
+        draw.rectangle([(0, 0), (w, top_bar_h)], fill=COLOR_WHITE)
+        draw.rectangle([(0, top_bar_h - 5), (w, top_bar_h)], fill=COLOR_RED)
+
+        y = (top_bar_h - len(h_lines) * h_line_h) // 2
+        if y < 8:
+            y = 8
+        for line in h_lines:
+            bbox = draw.textbbox((0, 0), line, font=headline_font)
+            lw = bbox[2] - bbox[0]
+            x = (w - lw) // 2
+            draw.text((x + 2, y + 2), line, font=headline_font, fill=(180, 180, 200))
+            draw.text((x, y), line, font=headline_font, fill=COLOR_NAVY)
+            y += h_line_h
+
+    # ── Bottom navy bar ───────────────────────────────────────────────────────
+    bottom_bar_h = int(h * 0.07)
+    draw.rectangle([(0, h - bottom_bar_h), (w, h)], fill=COLOR_NAVY)
+    url_font = get_font(int(w * 0.036))
+    draw.text((w // 2, h - bottom_bar_h // 2), "OfficialUSAStore.com",
               font=url_font, fill=COLOR_GOLD, anchor="mm")
 
-    # Price badge top-right
+    # ── Price badge — just below the top bar, top-right ─────────────────────────
     if price:
-        price_font = get_font(int(w * 0.055))
-        pt = f"${price}"
+        price_font = get_font(int(w * 0.065))
+        try:
+            pt = f"${float(price):.2f}"
+        except Exception:
+            pt = f"${price}"
         pb = draw.textbbox((0, 0), pt, font=price_font)
-        pw = pb[2] - pb[0] + 24
-        ph = pb[3] - pb[1] + 14
-        pad = int(w * 0.04)
+        pw = pb[2] - pb[0] + 28
+        ph = pb[3] - pb[1] + 18
         bx = w - pad - pw
-        by = pad
+        by = top_bar_h + pad  # below the headline bar
+        draw.rounded_rectangle([(bx + 3, by + 3), (bx + pw + 3, by + ph + 3)], radius=10, fill=(100, 0, 0))
         draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=10, fill=COLOR_RED)
         draw.text((bx + pw // 2, by + ph // 2), pt, font=price_font, fill=COLOR_WHITE, anchor="mm")
 
@@ -382,7 +410,7 @@ def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry
         img = smart_crop(img, *PLATFORM_SPECS["pinterest"]["size"])
 
         # Add overlay
-        subtitle = pin.get("description", "")[:60] if pin else ""
+        subtitle = pin.get("description", "")[:80] if pin else ""
         img = add_pinterest_overlay(img, pin_title, subtitle=subtitle, price=price)
 
         path = os.path.join(out_dir, f"pinterest_{i+1}.jpg")
@@ -419,7 +447,10 @@ def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry
 
     if ig_img:
         ig_img = smart_crop(ig_img, *PLATFORM_SPECS["instagram"]["size"])
-        ig_img = add_instagram_overlay(ig_img, price=price)
+        ig_headline = ig_data.get("headline", "") if isinstance(ig_data, dict) else ""
+        if not ig_headline:
+            ig_headline = title[:50]  # fallback to product title
+        ig_img = add_instagram_overlay(ig_img, headline=ig_headline, price=price)
         ig_path = os.path.join(out_dir, "instagram.jpg")
         ig_img.save(ig_path, "JPEG", quality=92)
         results["instagram"] = [ig_path]
