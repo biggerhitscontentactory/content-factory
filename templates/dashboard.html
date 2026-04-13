@@ -590,12 +590,12 @@ async function loadStats() {
       const pct = Math.min(100, Math.round((c / cnt) * 100));
       const cls = pct >= 100 ? 'full' : pct >= 75 ? 'warn' : '';
       html += `<div class="platform-row">
-        <span class="platform-name">${icons[p]||''} ${p}</span>
-        <span class="platform-count">${c} / ${cnt}</span>
-      </div>
-      <div class="progress-bar"><div class="progress-fill ${cls}" style="width:${pct}%"></div></div>`;
+        <span class="platform-name">${icons[p]||''} ${p}<\/span>
+        <span class="platform-count">${c} / ${cnt}<\/span>
+      <\/div>
+      <div class="progress-bar"><div class="progress-fill ${cls}" style="width:${pct}%"><\/div><\/div>`;
     }
-    document.getElementById('ov-platforms').innerHTML = html || '<span style="color:#64748b;font-size:13px;">No posts today yet</span>';
+    document.getElementById('ov-platforms').innerHTML = html || '<span style="color:#64748b;font-size:13px;">No posts today yet<\/span>';
 
     // Activity
     const acts = d.activity || [];
@@ -605,9 +605,9 @@ async function loadStats() {
         const ts = (a.timestamp||'').substring(0,16).replace('T',' ');
         const icon = a.success ? '✅' : '❌';
         ahtml += `<div style="padding:5px 0;border-bottom:1px solid #1e293b;font-size:12px;">
-          ${icon} <span style="color:#64748b;">${ts}</span> — ${a.action || ''}
-          ${a.dry_run ? '<span style="color:#f59e0b;"> (dry run)</span>' : ''}
-        </div>`;
+          ${icon} <span style="color:#64748b;">${ts}<\/span> — ${a.action || ''}
+          ${a.dry_run ? '<span style="color:#f59e0b;"> (dry run)<\/span>' : ''}
+        <\/div>`;
       });
       document.getElementById('ov-activity').innerHTML = ahtml;
     } else {
@@ -636,9 +636,9 @@ async function loadConfigStatus() {
     items.forEach(([key, label]) => {
       const ok = d[key];
       html += `<div class="config-row">
-        <span class="config-label">${label}</span>
-        <span class="config-val ${ok ? 'ok' : 'missing'}">${ok ? '✓ Configured' : '✗ Missing'}</span>
-      </div>`;
+        <span class="config-label">${label}<\/span>
+        <span class="config-val ${ok ? 'ok' : 'missing'}">${ok ? '✓ Configured' : '✗ Missing'}<\/span>
+      <\/div>`;
     });
     document.getElementById('setup-config').innerHTML = html;
     document.getElementById('config-status').innerHTML = html;
@@ -653,17 +653,17 @@ async function loadQueuePreview() {
     const qp = d.queue_preview || [];
     if (qp.length === 0) {
       document.getElementById('q-preview').innerHTML =
-        '<p style="color:#64748b;font-size:13px;">Queue is empty — click Rebuild Queue</p>';
+        '<p style="color:#64748b;font-size:13px;">Queue is empty — click Rebuild Queue<\/p>';
       return;
     }
-    let html = '<table class="table"><thead><tr><th>#</th><th>Tier</th><th>Product</th><th>Price</th></tr></thead><tbody>';
+    let html = '<table class="table"><thead><tr><th>#<\/th><th>Tier<\/th><th>Product<\/th><th>Price<\/th><\/tr><\/thead><tbody>';
     qp.forEach((p, i) => {
-      html += `<tr><td>${i+1}</td>
-        <td><span class="tier-badge t${p.tier}">T${p.tier}</span></td>
-        <td>${(p.title||'').substring(0,60)}${(p.title||'').length>60?'…':''}</td>
-        <td>$${p.price}</td></tr>`;
+      html += `<tr><td>${i+1}<\/td>
+        <td><span class="tier-badge t${p.tier}">T${p.tier}<\/span><\/td>
+        <td>${(p.title||'').substring(0,60)}${(p.title||'').length>60?'…':''}<\/td>
+        <td>$${p.price}<\/td><\/tr>`;
     });
-    html += '</tbody></table>';
+    html += '<\/tbody><\/table>';
     document.getElementById('q-preview').innerHTML = html;
   } catch(e) {}
 }
@@ -770,16 +770,16 @@ function renderPreviewGallery(items) {
   items.forEach(item => {
     const tier = item.tier || 3;
     const price = item.price ? `$${item.price}` : '';
-    const dryLabel = item.dry_run ? ' <span style="color:#f59e0b;font-size:10px;">(DRY RUN — not posted)</span>' : '';
+    const dryLabel = item.dry_run ? ' <span style="color:#f59e0b;font-size:10px;">(DRY RUN — not posted)<\/span>' : '';
 
     html += `<div class="preview-product">
       <div class="preview-product-header">
-        <span class="tier-badge t${tier}">T${tier}</span>
+        <span class="tier-badge t${tier}">T${tier}<\/span>
         <div>
-          <div class="preview-product-title">${escHtml(item.title)}</div>
-          <div class="preview-product-meta">${price}${dryLabel}</div>
-        </div>
-      </div>
+          <div class="preview-product-title">${escHtml(item.title)}<\/div>
+          <div class="preview-product-meta">${price}${dryLabel}<\/div>
+        <\/div>
+      <\/div>
       <div class="preview-platforms">`;
 
     // Pinterest pins
@@ -787,7 +787,7 @@ function renderPreviewGallery(items) {
     const pins = item.pinterest_pins || [];
     if (pinImgs.length > 0) {
       html += `<div class="preview-platform">
-        <div class="preview-platform-label">📌 Pinterest Pins (${pinImgs.length})</div>
+        <div class="preview-platform-label">📌 Pinterest Pins (${pinImgs.length})<\/div>
         <div class="preview-images">`;
       pinImgs.forEach((imgPath, i) => {
         const pin = pins[i] || {};
@@ -795,18 +795,18 @@ function renderPreviewGallery(items) {
         html += `<div class="preview-img-wrap">
           <img src="${imgUrl}" width="140" height="210" loading="lazy"
                onclick="openLightbox('${imgUrl}')" title="${escHtml(pin.title||'')}">
-          <div class="img-label">Pin ${i+1}</div>
-        </div>`;
+          <div class="img-label">Pin ${i+1}<\/div>
+        <\/div>`;
       });
-      html += `</div>`;
+      html += `<\/div>`;
       // Show first pin caption
       if (pins[0]) {
         html += `<div class="preview-caption">
-          <strong>Pin 1:</strong> ${escHtml(pins[0].title || '')}<br>
-          <span style="color:#64748b;">${escHtml((pins[0].description||'').substring(0,180))}${(pins[0].description||'').length>180?'…':''}</span>
-        </div>`;
+          <strong>Pin 1:<\/strong> ${escHtml(pins[0].title || '')}<br>
+          <span style="color:#64748b;">${escHtml((pins[0].description||'').substring(0,180))}${(pins[0].description||'').length>180?'…':''}<\/span>
+        <\/div>`;
       }
-      html += `</div>`;
+      html += `<\/div>`;
     }
 
     // Instagram
@@ -815,20 +815,20 @@ function renderPreviewGallery(items) {
       const ig = item.instagram || {};
       const imgUrl = '/' + igImgs[0];
       html += `<div class="preview-platform">
-        <div class="preview-platform-label">📸 Instagram</div>
+        <div class="preview-platform-label">📸 Instagram<\/div>
         <div class="preview-images">
           <div class="preview-img-wrap">
             <img src="${imgUrl}" width="160" height="160" loading="lazy"
                  onclick="openLightbox('${imgUrl}')">
-            <div class="img-label">Square</div>
-          </div>
-        </div>`;
+            <div class="img-label">Square<\/div>
+          <\/div>
+        <\/div>`;
       if (ig.caption) {
         html += `<div class="preview-caption">
-          <strong>Caption:</strong> ${escHtml(ig.caption.substring(0,200))}${ig.caption.length>200?'…':''}
-        </div>`;
+          <strong>Caption:<\/strong> ${escHtml(ig.caption.substring(0,200))}${ig.caption.length>200?'…':''}
+        <\/div>`;
       }
-      html += `</div>`;
+      html += `<\/div>`;
     }
 
     // Facebook
@@ -837,23 +837,23 @@ function renderPreviewGallery(items) {
       const fb = item.facebook || {};
       const imgUrl = '/' + fbImgs[0];
       html += `<div class="preview-platform">
-        <div class="preview-platform-label">📘 Facebook</div>
+        <div class="preview-platform-label">📘 Facebook<\/div>
         <div class="preview-images">
           <div class="preview-img-wrap">
             <img src="${imgUrl}" width="220" height="116" loading="lazy"
                  onclick="openLightbox('${imgUrl}')">
-            <div class="img-label">Landscape</div>
-          </div>
-        </div>`;
+            <div class="img-label">Landscape<\/div>
+          <\/div>
+        <\/div>`;
       if (fb.text) {
         html += `<div class="preview-caption">
-          <strong>Post:</strong> ${escHtml(fb.text.substring(0,200))}${fb.text.length>200?'…':''}
-        </div>`;
+          <strong>Post:<\/strong> ${escHtml(fb.text.substring(0,200))}${fb.text.length>200?'…':''}
+        <\/div>`;
       }
-      html += `</div>`;
+      html += `<\/div>`;
     }
 
-    html += `</div></div>`; // close preview-platforms + preview-product
+    html += `<\/div><\/div>`; // close preview-platforms + preview-product
   });
 
   container.innerHTML = html;
@@ -874,7 +874,7 @@ function closeLightbox() {
 
 // ── HTML escape ───────────────────────────────────────────────────────────────
 function escHtml(str) {
-  return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  return (str||'').replace(/&/g,'&amp;').replace(/<\/g,'&lt;').replace(/>/g,'&gt;')
                   .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
@@ -975,7 +975,7 @@ async function addTopic() {
     });
     const d = await r.json();
     if (d.success) {
-      document.getElementById('ai-add-msg').innerHTML = '<span style="color:#10b981;">✓ Topic added!</span>';
+      document.getElementById('ai-add-msg').innerHTML = '<span style="color:#10b981;">✓ Topic added!<\/span>';
       document.getElementById('ai-topic').value = '';
       loadTopics();
     }
@@ -989,7 +989,7 @@ async function loadTopics() {
     const topics = d.topics || [];
     if (topics.length === 0) {
       document.getElementById('ai-topics-list').innerHTML =
-        '<p style="color:#64748b;font-size:13px;">No topics yet. Add one above!</p>';
+        '<p style="color:#64748b;font-size:13px;">No topics yet. Add one above!<\/p>';
       return;
     }
     let html = '';
@@ -998,11 +998,11 @@ async function loadTopics() {
       const statusLabel = t.status === 'done' ? 'Done' : 'Pending';
       html += `<div class="topic-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div class="topic-title">${t.topic}</div>
-          <span class="topic-status ${statusCls}">${statusLabel}</span>
-        </div>
-        <div class="topic-meta">${t.pillar} · ${(t.added_at||'').substring(0,10)}</div>
-      </div>`;
+          <div class="topic-title">${t.topic}<\/div>
+          <span class="topic-status ${statusCls}">${statusLabel}<\/span>
+        <\/div>
+        <div class="topic-meta">${t.pillar} · ${(t.added_at||'').substring(0,10)}<\/div>
+      <\/div>`;
     });
     document.getElementById('ai-topics-list').innerHTML = html;
   } catch(e) {}
@@ -1089,30 +1089,30 @@ async function previewSheet() {
   const card = document.getElementById('heygen-sheet-card');
   const rows_el = document.getElementById('heygen-sheet-rows');
   card.style.display = 'block';
-  rows_el.innerHTML = '<div style="color:#64748b;font-size:13px;">Loading sheet...</div>';
+  rows_el.innerHTML = '<div style="color:#64748b;font-size:13px;">Loading sheet...<\/div>';
   try {
     const resp = await fetch('/api/heygen/sheet_preview', { headers: authHeaders() });
     const data = await resp.json();
     if (!data.rows || data.rows.length === 0) {
-      rows_el.innerHTML = '<div style="color:#64748b;font-size:13px;">All rows processed. Add more topics to the Google Sheet.</div>';
+      rows_el.innerHTML = '<div style="color:#64748b;font-size:13px;">All rows processed. Add more topics to the Google Sheet.<\/div>';
       return;
     }
-    let html = `<div style="font-size:12px;color:#64748b;margin-bottom:10px;">Showing next ${data.rows.length} unprocessed rows</div>`;
-    html += '<table class="table"><thead><tr><th>#</th><th>Topic (Col A)</th><th>Scene/Outfit (Col B)</th></tr></thead><tbody>';
+    let html = `<div style="font-size:12px;color:#64748b;margin-bottom:10px;">Showing next ${data.rows.length} unprocessed rows<\/div>`;
+    html += '<table class="table"><thead><tr><th>#<\/th><th>Topic (Col A)<\/th><th>Scene/Outfit (Col B)<\/th><\/tr><\/thead><tbody>';
     data.rows.forEach(r => {
-      html += `<tr><td style="color:#64748b;">${r.row}</td><td>${escHtml(r.title)}</td><td style="color:#94a3b8;font-size:12px;">${escHtml(r.scene.substring(0,120))}${r.scene.length>120?'...':''}</td></tr>`;
+      html += `<tr><td style="color:#64748b;">${r.row}<\/td><td>${escHtml(r.title)}<\/td><td style="color:#94a3b8;font-size:12px;">${escHtml(r.scene.substring(0,120))}${r.scene.length>120?'...':''}<\/td><\/tr>`;
     });
-    html += '</tbody></table>';
+    html += '<\/tbody><\/table>';
     rows_el.innerHTML = html;
   } catch(e) {
-    rows_el.innerHTML = '<div style="color:#ef4444;">Error: ' + e.message + '</div>';
+    rows_el.innerHTML = '<div style="color:#ef4444;">Error: ' + e.message + '<\/div>';
   }
 }
 
 async function refreshVideoLibrary() {
   const grid  = document.getElementById('heygen-library-grid');
   const empty = document.getElementById('heygen-library-empty');
-  grid.innerHTML = '<div style="color:#64748b;font-size:13px;">Refreshing...</div>';
+  grid.innerHTML = '<div style="color:#64748b;font-size:13px;">Refreshing...<\/div>';
   try {
     const resp = await fetch('/api/heygen/videos', { headers: authHeaders() });
     const data = await resp.json();
@@ -1126,24 +1126,24 @@ async function refreshVideoLibrary() {
     grid.innerHTML = videos.slice().reverse().map(v => {
       const statusColor = v.status === 'completed' ? '#22c55e' : v.status === 'failed' ? '#ef4444' : '#f59e0b';
       const statusLabel = v.status === 'completed' ? '✓ Ready' : v.status === 'failed' ? '✕ Failed' : '⏳ Rendering...';
-      const thumb = v.thumbnail_url ? `<img src="${v.thumbnail_url}" style="width:100%;border-radius:6px 6px 0 0;aspect-ratio:16/9;object-fit:cover;">` : `<div style="width:100%;aspect-ratio:16/9;background:#1e293b;border-radius:6px 6px 0 0;display:flex;align-items:center;justify-content:center;color:#475569;font-size:24px;">🎬</div>`;
+      const thumb = v.thumbnail_url ? `<img src="${v.thumbnail_url}" style="width:100%;border-radius:6px 6px 0 0;aspect-ratio:16/9;object-fit:cover;">` : `<div style="width:100%;aspect-ratio:16/9;background:#1e293b;border-radius:6px 6px 0 0;display:flex;align-items:center;justify-content:center;color:#475569;font-size:24px;">🎬<\/div>`;
       const actions = v.status === 'completed' && v.video_url
-        ? `<a href="${v.video_url}" target="_blank" class="btn btn-green" style="font-size:11px;padding:5px 10px;">↓ Download</a>`
-        : `<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px;" onclick="checkSingleVideo('${v.video_id}')">Check Status</button>`;
+        ? `<a href="${v.video_url}" target="_blank" class="btn btn-green" style="font-size:11px;padding:5px 10px;">↓ Download<\/a>`
+        : `<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px;" onclick="checkSingleVideo('${v.video_id}')">Check Status<\/button>`;
       return `<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;overflow:hidden;">
         ${thumb}
         <div style="padding:10px;">
-          <div style="font-size:12px;font-weight:700;color:#f8fafc;margin-bottom:4px;line-height:1.3;">${escHtml(v.title.substring(0,70))}${v.title.length>70?'...':''}</div>
+          <div style="font-size:12px;font-weight:700;color:#f8fafc;margin-bottom:4px;line-height:1.3;">${escHtml(v.title.substring(0,70))}${v.title.length>70?'...':''}<\/div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <span style="font-size:11px;font-weight:700;color:${statusColor};">${statusLabel}</span>
-            <span style="font-size:10px;color:#475569;">${v.target_minutes||'?'} min &bull; ${v.scene_count||'?'} scenes</span>
-          </div>
-          <div style="display:flex;gap:6px;">${actions}</div>
-        </div>
-      </div>`;
+            <span style="font-size:11px;font-weight:700;color:${statusColor};">${statusLabel}<\/span>
+            <span style="font-size:10px;color:#475569;">${v.target_minutes||'?'} min &bull; ${v.scene_count||'?'} scenes<\/span>
+          <\/div>
+          <div style="display:flex;gap:6px;">${actions}<\/div>
+        <\/div>
+      <\/div>`;
     }).join('');
   } catch(e) {
-    grid.innerHTML = '<div style="color:#ef4444;">Error: ' + e.message + '</div>';
+    grid.innerHTML = '<div style="color:#ef4444;">Error: ' + e.message + '<\/div>';
   }
 }
 
@@ -1161,7 +1161,8 @@ async function checkSingleVideo(videoId) {
 // ── Init ─────────────────────────────────────────────────────────────────────────────
 loadStats();
 loadConfigStatus();
-setInterval(loadStats, 30000);ipt>
+setInterval(loadStats, 30000);
+</script>
 
 <!-- Lightbox -->
 <div id="lightbox" onclick="closeLightbox()">
