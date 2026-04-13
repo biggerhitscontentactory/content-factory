@@ -595,7 +595,85 @@ def _log_activity(entry):
         f.write(json.dumps(entry) + "\n")
 
 
-# ─── Health Check ─────────────────────────────────────────────────────────────
+# ─── API: HeyGen Video Generator ────────────────────────────────────────────────────
+@app.route("/api/heygen/run", methods=["POST"])
+@login_required
+def api_heygen_run():
+    """Start a HeyGen video generation batch job (async)."""
+    body = request.get_json(force=True, silent=True) or {}
+    count          = max(1, min(10, int(body.get("count", 1))))
+    target_minutes = max(7, min(13, int(body.get("minutes", 10))))
+    test_mode      = bool(body.get("test", False))
+
+    job_id = str(uuid.uuid4())[:8]
+    job_file = os.path.join(DATA_DIR, "jobs", f"{job_id}.json")
+    os.makedirs(os.path.dirname(job_file), exist_ok=True)
+    _write_job(job_file, {"status": "running", "output": "", "result": None})
+
+    def run_job():
+        lines = []
+        def cb(msg):
+            lines.append(msg)
+            _write_job(job_file, {"status": "running", "output": "\n".join(lines), "result": None})
+
+        try:
+            from modules.heygen_video import run_heygen_batch
+            results = run_heygen_batch(
+                count=count,
+                target_minutes=target_minutes,
+                test_mode=test_mode,
+                progress_cb=cb,
+            )
+            _write_job(job_file, {"status": "done", "output": "\n".join(lines), "result": results})
+        except Exception as e:
+            lines.append(f"[ERROR] {e}")
+            _write_job(job_file, {"status": "error", "output": "\n".join(lines), "result": None})
+
+    import threading
+    threading.Thread(target=run_job, daemon=True).start()
+    return jsonify({"job_id": job_id, "status": "queued"})
+
+
+@app.route("/api/heygen/videos")
+@login_required
+def api_heygen_videos():
+    """Return all HeyGen videos from the log, with refreshed statuses."""
+    try:
+        from modules.heygen_video import update_video_statuses
+        videos = update_video_statuses()
+    except Exception as e:
+        return jsonify({"error": str(e), "videos": []})
+    return jsonify({"videos": videos})
+
+
+@app.route("/api/heygen/status/<video_id>")
+@login_required
+def api_heygen_video_status(video_id):
+    """Check status of a single HeyGen video."""
+    try:
+        from modules.heygen_video import get_video_status
+        status = get_video_status(video_id)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    return jsonify(status)
+
+
+@app.route("/api/heygen/sheet_preview")
+@login_required
+def api_heygen_sheet_preview():
+    """Return the first 20 unprocessed rows from the Google Sheet."""
+    try:
+        from modules.heygen_video import get_unprocessed_rows
+        from config import HEYGEN_SHEET_ID, DATA_DIR as cfg_data
+        import os as _os
+        done_file = _os.path.join(cfg_data, "heygen_done_rows.json")
+        rows = get_unprocessed_rows(HEYGEN_SHEET_ID, done_file)[:20]
+    except Exception as e:
+        return jsonify({"error": str(e), "rows": []})
+    return jsonify({"rows": rows, "total": len(rows)})
+
+
+# ─── Health Check ────────────────────────────────────────────────────────────────────
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "time": datetime.now().isoformat()})

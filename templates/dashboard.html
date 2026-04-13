@@ -165,6 +165,7 @@
   <button class="nav-btn" onclick="showTab('aichannel')">💼 AI Channel</button>
   <button class="nav-btn" onclick="showTab('queue')">📋 Queue</button>
   <button class="nav-btn" onclick="showTab('setup')">⚙️ Setup</button>
+  <button class="nav-btn" onclick="showTab('heygen')">🎬 HeyGen Videos</button>
 </div>
 
 <div class="container">
@@ -442,6 +443,103 @@
         <div id="repin-log-rows"></div>
       </div>
     </div>
+  </div>
+
+  <!-- ── HeyGen Video Generator Tab ─────────────────────────────────────── -->
+  <div id="tab-heygen" class="tab-panel">
+
+    <!-- Avatar Info Card -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-title">🎬 HeyGen Video Generator</div>
+      <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px;">
+        <div style="background:#1e293b;border:2px solid #0ea5e9;border-radius:12px;padding:14px 20px;flex:1;">
+          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Avatar</div>
+          <div style="font-size:18px;font-weight:800;color:#f8fafc;">Brian Tines</div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Beachside Relaxation Enthusiast &bull; Essential Plan &bull; No B-roll &bull; No Captions</div>
+        </div>
+        <div style="background:#1e293b;border:2px solid #22c55e;border-radius:12px;padding:14px 20px;flex:1;">
+          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Script Source</div>
+          <div style="font-size:14px;font-weight:700;color:#f8fafc;">Google Sheet → GPT-4o-mini</div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Col A = Topic &bull; Col B = Scene/Outfit &bull; Auto-advances row after each video</div>
+        </div>
+      </div>
+      <div class="alert alert-blue">
+        Videos are submitted to HeyGen and render in the background (typically 5–20 min per video). Check the <strong>Video Library</strong> below for status and download links.
+      </div>
+    </div>
+
+    <!-- Controls Card -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-title">🎛️ Video Settings</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
+
+        <!-- Video Length -->
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:8px;">Target Length</label>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="range" id="heygen-minutes" min="7" max="13" value="10" step="1"
+              style="flex:1;accent-color:#0ea5e9;"
+              oninput="document.getElementById('heygen-minutes-val').textContent=this.value+' min'">
+            <span id="heygen-minutes-val" style="font-size:16px;font-weight:800;color:#0ea5e9;min-width:50px;">10 min</span>
+          </div>
+          <div style="font-size:11px;color:#475569;margin-top:4px;">7–13 minutes (Essential plan unlimited)</div>
+        </div>
+
+        <!-- Videos per run -->
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:8px;">Videos per Run</label>
+          <select id="heygen-count" style="width:100%;background:#0f172a;border:1px solid #334155;color:#f8fafc;padding:8px 12px;border-radius:6px;font-size:14px;">
+            <option value="1">1 video</option>
+            <option value="2">2 videos</option>
+            <option value="3" selected>3 videos</option>
+            <option value="5">5 videos</option>
+            <option value="10">10 videos</option>
+          </select>
+          <div style="font-size:11px;color:#475569;margin-top:4px;">Each video queued sequentially</div>
+        </div>
+
+        <!-- Mode -->
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:8px;">Mode</label>
+          <div style="display:flex;gap:8px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#94a3b8;cursor:pointer;">
+              <input type="radio" name="heygen-mode" value="live" checked style="accent-color:#22c55e;"> Live
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#94a3b8;cursor:pointer;">
+              <input type="radio" name="heygen-mode" value="test" style="accent-color:#f59e0b;"> Test (watermarked)
+            </label>
+          </div>
+          <div style="font-size:11px;color:#475569;margin-top:6px;">Test mode = free, watermarked preview</div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="btn-row">
+        <button class="btn btn-green" onclick="runHeyGen()">▶️ Generate Videos</button>
+        <button class="btn btn-ghost" onclick="previewSheet()">📋 Preview Next Topics</button>
+        <button class="btn btn-ghost" onclick="refreshVideoLibrary()">🔄 Refresh Library</button>
+      </div>
+
+      <div id="heygen-spinner" class="spinner-wrap" style="display:none;margin-top:12px;">
+        <div class="spinner"></div><span id="heygen-spinner-text">Generating scripts &amp; submitting to HeyGen...</span>
+      </div>
+      <div id="heygen-output" class="log-box" style="display:none;margin-top:12px;"></div>
+    </div>
+
+    <!-- Sheet Preview Card -->
+    <div class="card" id="heygen-sheet-card" style="margin-bottom:14px;display:none;">
+      <div class="section-title">📋 Next Topics in Queue</div>
+      <div id="heygen-sheet-rows"></div>
+    </div>
+
+    <!-- Video Library Card -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-title">🎞️ Video Library</div>
+      <div id="heygen-library-empty" style="color:#64748b;font-size:13px;padding:20px 0;">No videos yet. Click <strong>Generate Videos</strong> to create your first batch.</div>
+      <div id="heygen-library-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;"></div>
+    </div>
+
   </div>
 
 </div><!-- /container -->
@@ -931,11 +1029,139 @@ function disableBtns(disabled) {
   document.querySelectorAll('.btn').forEach(b => b.disabled = disabled);
 }
 
-// ── Init ─────────────────────────────────────────────────────────────────────
+// ── HeyGen Video Generator ─────────────────────────────────────────────────────
+let heygenJobId = null;
+let heygenPollTimer = null;
+
+async function runHeyGen() {
+  const minutes  = parseInt(document.getElementById('heygen-minutes').value);
+  const count    = parseInt(document.getElementById('heygen-count').value);
+  const testMode = document.querySelector('input[name="heygen-mode"]:checked').value === 'test';
+
+  document.getElementById('heygen-spinner').style.display = 'flex';
+  document.getElementById('heygen-spinner-text').textContent = `Generating ${count} script(s) & submitting to HeyGen...`;
+  document.getElementById('heygen-output').style.display = 'block';
+  document.getElementById('heygen-output').textContent = 'Starting...';
+
+  try {
+    const resp = await fetch('/api/heygen/run', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ count, minutes, test: testMode }),
+    });
+    if (!resp.ok) { throw new Error(`HTTP ${resp.status}`); }
+    const data = await resp.json();
+    if (data.error === 'session_expired') { window.location.href = '/login'; return; }
+    heygenJobId = data.job_id;
+    pollHeyGenJob(heygenJobId);
+  } catch(e) {
+    document.getElementById('heygen-spinner').style.display = 'none';
+    document.getElementById('heygen-output').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function pollHeyGenJob(jobId) {
+  try {
+    const resp = await fetch(`/api/run/status/${jobId}`, { headers: authHeaders() });
+    if (!resp.ok) { throw new Error(`HTTP ${resp.status}`); }
+    const data = await resp.json();
+    if (data.error === 'session_expired') { window.location.href = '/login'; return; }
+
+    document.getElementById('heygen-output').textContent = data.output || '';
+    document.getElementById('heygen-output').scrollTop = 99999;
+
+    if (data.status === 'running') {
+      heygenPollTimer = setTimeout(() => pollHeyGenJob(jobId), 4000);
+    } else {
+      document.getElementById('heygen-spinner').style.display = 'none';
+      if (data.status === 'done') {
+        document.getElementById('heygen-output').textContent += '\n\n✓ All videos submitted to HeyGen. Rendering in background (5-20 min).';
+        setTimeout(refreshVideoLibrary, 3000);
+      }
+    }
+  } catch(e) {
+    document.getElementById('heygen-spinner').style.display = 'none';
+    document.getElementById('heygen-output').textContent += '\nPolling error: ' + e.message;
+  }
+}
+
+async function previewSheet() {
+  const card = document.getElementById('heygen-sheet-card');
+  const rows_el = document.getElementById('heygen-sheet-rows');
+  card.style.display = 'block';
+  rows_el.innerHTML = '<div style="color:#64748b;font-size:13px;">Loading sheet...</div>';
+  try {
+    const resp = await fetch('/api/heygen/sheet_preview', { headers: authHeaders() });
+    const data = await resp.json();
+    if (!data.rows || data.rows.length === 0) {
+      rows_el.innerHTML = '<div style="color:#64748b;font-size:13px;">All rows processed. Add more topics to the Google Sheet.</div>';
+      return;
+    }
+    let html = `<div style="font-size:12px;color:#64748b;margin-bottom:10px;">Showing next ${data.rows.length} unprocessed rows</div>`;
+    html += '<table class="table"><thead><tr><th>#</th><th>Topic (Col A)</th><th>Scene/Outfit (Col B)</th></tr></thead><tbody>';
+    data.rows.forEach(r => {
+      html += `<tr><td style="color:#64748b;">${r.row}</td><td>${escHtml(r.title)}</td><td style="color:#94a3b8;font-size:12px;">${escHtml(r.scene.substring(0,120))}${r.scene.length>120?'...':''}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    rows_el.innerHTML = html;
+  } catch(e) {
+    rows_el.innerHTML = '<div style="color:#ef4444;">Error: ' + e.message + '</div>';
+  }
+}
+
+async function refreshVideoLibrary() {
+  const grid  = document.getElementById('heygen-library-grid');
+  const empty = document.getElementById('heygen-library-empty');
+  grid.innerHTML = '<div style="color:#64748b;font-size:13px;">Refreshing...</div>';
+  try {
+    const resp = await fetch('/api/heygen/videos', { headers: authHeaders() });
+    const data = await resp.json();
+    const videos = data.videos || [];
+    if (videos.length === 0) {
+      grid.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    grid.innerHTML = videos.slice().reverse().map(v => {
+      const statusColor = v.status === 'completed' ? '#22c55e' : v.status === 'failed' ? '#ef4444' : '#f59e0b';
+      const statusLabel = v.status === 'completed' ? '✓ Ready' : v.status === 'failed' ? '✕ Failed' : '⏳ Rendering...';
+      const thumb = v.thumbnail_url ? `<img src="${v.thumbnail_url}" style="width:100%;border-radius:6px 6px 0 0;aspect-ratio:16/9;object-fit:cover;">` : `<div style="width:100%;aspect-ratio:16/9;background:#1e293b;border-radius:6px 6px 0 0;display:flex;align-items:center;justify-content:center;color:#475569;font-size:24px;">🎬</div>`;
+      const actions = v.status === 'completed' && v.video_url
+        ? `<a href="${v.video_url}" target="_blank" class="btn btn-green" style="font-size:11px;padding:5px 10px;">↓ Download</a>`
+        : `<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px;" onclick="checkSingleVideo('${v.video_id}')">Check Status</button>`;
+      return `<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;overflow:hidden;">
+        ${thumb}
+        <div style="padding:10px;">
+          <div style="font-size:12px;font-weight:700;color:#f8fafc;margin-bottom:4px;line-height:1.3;">${escHtml(v.title.substring(0,70))}${v.title.length>70?'...':''}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-size:11px;font-weight:700;color:${statusColor};">${statusLabel}</span>
+            <span style="font-size:10px;color:#475569;">${v.target_minutes||'?'} min &bull; ${v.scene_count||'?'} scenes</span>
+          </div>
+          <div style="display:flex;gap:6px;">${actions}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div style="color:#ef4444;">Error: ' + e.message + '</div>';
+  }
+}
+
+async function checkSingleVideo(videoId) {
+  try {
+    const resp = await fetch(`/api/heygen/status/${videoId}`, { headers: authHeaders() });
+    const data = await resp.json();
+    alert(`Video ${videoId}\nStatus: ${data.status}\n${data.video_url ? 'URL: ' + data.video_url : ''}`);
+    if (data.status === 'completed') refreshVideoLibrary();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────────────
 loadStats();
 loadConfigStatus();
-setInterval(loadStats, 30000);
-</script>
+setInterval(loadStats, 30000);ipt>
 
 <!-- Lightbox -->
 <div id="lightbox" onclick="closeLightbox()">

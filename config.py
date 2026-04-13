@@ -21,6 +21,15 @@ SHOPIFY_API_VERSION = "2024-01"
 # ─── OneUp ────────────────────────────────────────────────────────────────────
 ONEUP_API_KEY = os.environ.get("ONEUP_API_KEY", "")
 
+# ─── HeyGen ───────────────────────────────────────────────────────────────────
+HEYGEN_API_KEY       = os.environ.get("HEYGEN_API_KEY", "")
+HEYGEN_AVATAR_ID     = "01cd5898e6314ebbbc594840145dd829"   # Brian Tines
+HEYGEN_VOICE_ID      = "cff38160a33643d7b8101d2ab989d5f1"   # Brian Tines voice (Essential plan)
+HEYGEN_SHEET_ID      = os.environ.get("HEYGEN_SHEET_ID", "1xPAwaOish_Nw6Fix4xGEqeR_EfQaFwL2XcsWkfxy3q0")
+HEYGEN_VIDEO_MIN_MIN = 7    # minimum video length in minutes
+HEYGEN_VIDEO_MAX_MIN = 13   # maximum video length in minutes
+HEYGEN_DAILY_LIMIT   = int(os.environ.get("HEYGEN_DAILY_LIMIT", 3))
+
 # ─── Google Sheets (optional) ─────────────────────────────────────────────────
 GOOGLE_SHEETS_CREDENTIALS_FILE = "google_credentials.json"
 ECOMMERCE_SHEET_ID  = os.environ.get("ECOMMERCE_SHEET_ID", "")
