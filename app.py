@@ -621,15 +621,14 @@ def api_heygen_run():
     test_mode      = bool(body.get("test", False))
 
     job_id = str(uuid.uuid4())[:8]
-    job_file = os.path.join(DATA_DIR, "jobs", f"{job_id}.json")
-    os.makedirs(os.path.dirname(job_file), exist_ok=True)
-    _write_job(job_file, {"status": "running", "output": "", "result": None})
+    _write_job(job_id, {"status": "queued", "output": "Starting HeyGen batch...", "result": None,
+                        "started_at": datetime.now().isoformat()})
 
     def run_job():
         lines = []
         def cb(msg):
             lines.append(msg)
-            _write_job(job_file, {"status": "running", "output": "\n".join(lines), "result": None})
+            _update_job(job_id, {"status": "running", "output": "\n".join(lines)})
 
         try:
             from modules.heygen_video import run_heygen_batch
@@ -639,12 +638,15 @@ def api_heygen_run():
                 test_mode=test_mode,
                 progress_cb=cb,
             )
-            _write_job(job_file, {"status": "done", "output": "\n".join(lines), "result": results})
+            _update_job(job_id, {"status": "done", "output": "\n".join(lines),
+                                  "result": results, "finished_at": datetime.now().isoformat()})
         except Exception as e:
             lines.append(f"[ERROR] {e}")
-            _write_job(job_file, {"status": "error", "output": "\n".join(lines), "result": None})
+            import traceback
+            lines.append(traceback.format_exc())
+            _update_job(job_id, {"status": "error", "output": "\n".join(lines),
+                                  "result": None, "finished_at": datetime.now().isoformat()})
 
-    import threading
     threading.Thread(target=run_job, daemon=True).start()
     return jsonify({"job_id": job_id, "status": "queued"})
 
