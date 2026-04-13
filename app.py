@@ -44,11 +44,26 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "America250")
 
-# Simple in-memory token store: token -> True
-# Token is generated on login and stored in the page's localStorage via JS
-# This bypasses session cookie issues on Railway's HTTPS proxy
+# File-based token store — persists across Railway worker processes
+# Token is generated on login and embedded in the dashboard HTML
 import secrets as _secrets
-_valid_tokens = set()
+_TOKENS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "auth_tokens.json")
+os.makedirs(os.path.dirname(_TOKENS_FILE), exist_ok=True)
+
+def _load_tokens():
+    try:
+        with open(_TOKENS_FILE) as f:
+            return set(json.load(f))
+    except Exception:
+        return set()
+
+def _save_token(token):
+    tokens = _load_tokens()
+    tokens.add(token)
+    # Keep only the last 50 tokens to prevent unbounded growth
+    tokens = set(list(tokens)[-50:])
+    with open(_TOKENS_FILE, "w") as f:
+        json.dump(list(tokens), f)
 
 def login_required(f):
     @wraps(f)
@@ -56,9 +71,9 @@ def login_required(f):
         # Check session cookie first (page loads)
         if session.get("logged_in"):
             return f(*args, **kwargs)
-        # Check X-Auth-Token header (API calls from JS)
+        # Check X-Auth-Token header (API calls from JS) — file-based, works across workers
         token = request.headers.get("X-Auth-Token", "")
-        if token and token in _valid_tokens:
+        if token and token in _load_tokens():
             return f(*args, **kwargs)
         # Not authenticated
         if request.path.startswith("/api/"):
@@ -76,7 +91,7 @@ def login():
             session.permanent = True
             # Generate a token for JS API calls (stored in localStorage)
             token = _secrets.token_hex(24)
-            _valid_tokens.add(token)
+            _save_token(token)
             # Pass token to template via session so JS can store it
             session["api_token"] = token
             return redirect(url_for("index"))
