@@ -108,9 +108,10 @@ def mark_row_done(row_num: int, done_file: str):
 
 
 # ─── GPT Script Generator ─────────────────────────────────────────────────────
-def generate_script(title: str, scene_hint: str, target_minutes: int) -> str:
+def generate_script(title: str, opening_line: str, target_minutes: int) -> str:
     """
     Uses GPT to generate a full spoken video script for the given topic.
+    opening_line: the first sentence Brian says (from Column B of the sheet).
     Target length: target_minutes * WORDS_PER_MINUTE words.
     Returns plain spoken text (no stage directions, no headers, no B-roll notes).
     """
@@ -121,6 +122,11 @@ def generate_script(title: str, scene_hint: str, target_minutes: int) -> str:
     min_words    = (target_minutes - 1) * WORDS_PER_MINUTE
     max_words    = (target_minutes + 1) * WORDS_PER_MINUTE
 
+    # Build opening line instruction
+    opening_instruction = ""
+    if opening_line:
+        opening_instruction = f"\n- The script MUST begin with this exact sentence (word for word): \"{opening_line}\"\n- Continue naturally from that opening sentence for the rest of the script."
+
     system_prompt = f"""You are a professional video scriptwriter for a YouTube channel called "Laptops and Latitude" 
 hosted by Brian Tines — a relaxed, knowledgeable guy who talks about AI tools, automation, and business from 
 beachside locations. His style is conversational, warm, and practical. He speaks directly to the camera the 
@@ -130,10 +136,8 @@ Write ONLY the spoken words Brian will say.
 - NO stage directions, NO scene descriptions, NO [B-roll], NO (pause), NO headers, NO bullet points
 - NO captions or on-screen text references
 - Write as natural spoken English — contractions, conversational flow, occasional rhetorical questions
-- Start with a hook that grabs attention in the first 15 seconds
 - End with a clear call to action (subscribe, comment, or check a link)
-- Target length: {target_words} words (between {min_words} and {max_words} words)
-- Scene context (for your awareness only, do NOT mention it): {scene_hint}"""
+- Target length: {target_words} words (between {min_words} and {max_words} words){opening_instruction}"""
 
     user_prompt = f"Write the full spoken script for a video titled: \"{title}\""
 
@@ -347,7 +351,7 @@ def run_heygen_batch(
         # Step 1: Generate script via GPT
         log(f"[HeyGen] Generating script via GPT ({OPENAI_MODEL})...")
         try:
-            script = generate_script(title, scene, target_minutes)
+            script = generate_script(title, opening_line=scene, target_minutes=target_minutes)
             word_count = len(script.split())
             log(f"[HeyGen] Script generated: {word_count} words (~{word_count // WORDS_PER_MINUTE} min)")
         except Exception as e:
