@@ -51,6 +51,62 @@ VIDEO_WIDTH  = 1280
 VIDEO_HEIGHT = 720
 
 
+# ─── Google Sheets writer (delete row via API) ───────────────────────────────
+def delete_sheet_row(sheet_id: str, row_index: int):
+    """
+    Deletes a row from the Google Sheet using the Google Sheets API.
+    row_index is 1-based (as stored in the row dict); converts to 0-based for API.
+    Requires GOOGLE_SERVICE_ACCOUNT_JSON env var OR the sheet to be editable via API key.
+    Falls back silently if credentials are not available.
+    """
+    # Try service account credentials first
+    service_account_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
+
+    # Convert 1-based row to 0-based index for Sheets API
+    zero_based_index = row_index - 1  # row 1 = header, row 2 = first data row
+
+    if service_account_json:
+        try:
+            import json as _json
+            from google.oauth2.service_account import Credentials
+            from googleapiclient.discovery import build
+
+            creds_dict = _json.loads(service_account_json)
+            creds = Credentials.from_service_account_info(
+                creds_dict,
+                scopes=["https://www.googleapis.com/auth/spreadsheets"]
+            )
+            service = build("sheets", "v4", credentials=creds)
+            # Get the sheet's internal sheetId (gid=0 = first sheet)
+            sheet_meta = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            gid = sheet_meta["sheets"][0]["properties"]["sheetId"]
+
+            body = {
+                "requests": [{
+                    "deleteDimension": {
+                        "range": {
+                            "sheetId": gid,
+                            "dimension": "ROWS",
+                            "startIndex": zero_based_index,
+                            "endIndex": zero_based_index + 1
+                        }
+                    }
+                }]
+            }
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=sheet_id, body=body
+            ).execute()
+            return True
+        except Exception as e:
+            print(f"[HeyGen] Warning: Could not delete row {row_index} via service account: {e}")
+            return False
+    else:
+        # No credentials available — skip deletion silently
+        print(f"[HeyGen] Note: GOOGLE_SERVICE_ACCOUNT_JSON not set — row {row_index} not deleted from sheet.")
+        return False
+
+
 # ─── Google Sheets reader (public CSV export, no auth needed) ─────────────────
 def read_sheet_rows(sheet_id: str) -> list[dict]:
     """
@@ -393,7 +449,13 @@ def run_heygen_batch(
             json.dump(existing_videos, f, indent=2)
 
         mark_row_done(row_num, done_file)
-        log(f"[HeyGen] Row {row_num} marked as done. Video is processing on HeyGen servers.")
+        # Delete the row from the Google Sheet so it doesn't reappear
+        deleted = delete_sheet_row(HEYGEN_SHEET_ID, row_num)
+        if deleted:
+            log(f"[HeyGen] Row {row_num} deleted from Google Sheet.")
+        else:
+            log(f"[HeyGen] Row {row_num} marked as done locally (sheet deletion requires service account credentials).")
+        log(f"[HeyGen] Video is processing on HeyGen servers.")
         log(f"[HeyGen] Check status at: https://app.heygen.com/videos/{video_id}")
 
         results.append({
