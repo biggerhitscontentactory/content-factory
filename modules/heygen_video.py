@@ -1,9 +1,12 @@
 """
 HeyGen Video Generator
 ======================
-Reads topics + scene descriptions from Google Sheet (Col A = title, Col B = scene/avatar edits).
+Reads topics + scene descriptions from Google Sheet:
+  Col A = video title/topic
+  Col B = scene/clothing description
+  Col C = avatar look ID (specific look from the Brian S Tines avatar group)
 Generates a full spoken script via GPT, splits into scenes, and submits to HeyGen API v2.
-- Avatar: Brian Tines (01cd5898e6314ebbbc594840145dd829)
+- Avatar group: Brian S Tines (973f341d0e3c4459bf91d2d29734321c)
 - Voice:  Brian Tines voice (cff38160a33643d7b8101d2ab989d5f1) — Essential plan, no credits
 - No B-roll, no captions, avatar talking the entire video
 - Target length: 7–13 minutes (configurable per run)
@@ -24,7 +27,7 @@ try:
     )
 except ImportError:
     HEYGEN_API_KEY   = os.environ.get("HEYGEN_API_KEY", "")
-    HEYGEN_AVATAR_ID = "01cd5898e6314ebbbc594840145dd829"
+    HEYGEN_AVATAR_ID = "973f341d0e3c4459bf91d2d29734321c"
     HEYGEN_VOICE_ID  = "cff38160a33643d7b8101d2ab989d5f1"
     HEYGEN_SHEET_ID  = "1xPAwaOish_Nw6Fix4xGEqeR_EfQaFwL2XcsWkfxy3q0"
     OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "")
@@ -69,10 +72,11 @@ def read_sheet_rows(sheet_id: str) -> list[dict]:
             continue
         if not row or not row[0].strip():
             continue
-        title = row[0].strip() if len(row) > 0 else ""
-        scene = row[1].strip() if len(row) > 1 else ""
+        title    = row[0].strip() if len(row) > 0 else ""
+        scene    = row[1].strip() if len(row) > 1 else ""
+        look_id  = row[2].strip() if len(row) > 2 else ""
         if title:
-            rows.append({"title": title, "scene": scene, "row": i + 1})
+            rows.append({"title": title, "scene": scene, "look_id": look_id, "row": i + 1})
     return rows
 
 
@@ -176,18 +180,22 @@ def split_script_into_scenes(script: str, max_words: int = MAX_WORDS_PER_SCENE) 
 
 
 # ─── HeyGen API Calls ─────────────────────────────────────────────────────────
-def submit_video(title: str, scenes: list[str], test: bool = False) -> str:
+def submit_video(title: str, scenes: list[str], look_id: str = "", test: bool = False) -> str:
     """
     Submits a multi-scene video to HeyGen API v2.
-    Each scene = same Brian Tines avatar talking, no B-roll, no captions.
+    Each scene = Brian S Tines avatar talking, no B-roll, no captions.
+    look_id: specific look/outfit ID from Column C of the sheet.
     Returns video_id.
     """
+    # Use the look_id from Column C if provided, otherwise fall back to group avatar ID
+    avatar_id_to_use = look_id if look_id else HEYGEN_AVATAR_ID
+
     video_inputs = []
     for scene_text in scenes:
         video_inputs.append({
             "character": {
                 "type": "avatar",
-                "avatar_id": HEYGEN_AVATAR_ID,
+                "avatar_id": avatar_id_to_use,
                 "avatar_style": "normal",
             },
             "voice": {
@@ -325,13 +333,15 @@ def run_heygen_batch(
     results = []
 
     for idx, row in enumerate(rows_to_process):
-        title = row["title"]
-        scene = row["scene"]
+        title   = row["title"]
+        scene   = row["scene"]
+        look_id = row.get("look_id", "")
         row_num = row["row"]
 
         log(f"\n[HeyGen] ── Video {idx+1}/{len(rows_to_process)} ──────────────────────────")
         log(f"[HeyGen] Title: {title}")
         log(f"[HeyGen] Scene: {scene[:80]}...")
+        log(f"[HeyGen] Avatar look ID: {look_id if look_id else HEYGEN_AVATAR_ID + ' (group default)'}")
         log(f"[HeyGen] Target length: {target_minutes} minutes (~{target_minutes * WORDS_PER_MINUTE} words)")
 
         # Step 1: Generate script via GPT
@@ -352,7 +362,7 @@ def run_heygen_batch(
         # Step 3: Submit to HeyGen
         log(f"[HeyGen] Submitting to HeyGen API (test_mode={test_mode})...")
         try:
-            video_id = submit_video(title, scenes, test=test_mode)
+            video_id = submit_video(title, scenes, look_id=look_id, test=test_mode)
             log(f"[HeyGen] ✓ Video submitted! video_id={video_id}")
         except Exception as e:
             log(f"[HeyGen] ERROR submitting video: {e}")
@@ -364,6 +374,7 @@ def run_heygen_batch(
             "video_id": video_id,
             "title": title,
             "scene": scene,
+            "look_id": look_id,
             "row": row_num,
             "target_minutes": target_minutes,
             "word_count": word_count,
