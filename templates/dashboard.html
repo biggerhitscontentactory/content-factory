@@ -474,6 +474,85 @@
         <div id="repin-log-rows"></div>
       </div>
     </div>
+
+    <!-- ── Instagram Daily Warmup ──────────────────────────────────────── -->
+    <div class="card">
+      <div class="section-title">📸 Instagram Daily Warmup</div>
+      <div class="alert alert-blue" style="margin-bottom:14px;">
+        Keeps your Instagram account healthy: views 10–20 posts, likes 8–15, follows 2–3 similar
+        accounts per day, and auto-unfollows after 4 days. Requires <code>IG_USERNAME</code> and
+        <code>IG_PASSWORD</code> in Railway Variables.
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+        <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:4px;">Likes Today</div>
+          <div id="ig-warmup-likes" style="font-size:24px;font-weight:800;color:#f8fafc;">—</div>
+        </div>
+        <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:4px;">Follows Today</div>
+          <div id="ig-warmup-follows" style="font-size:24px;font-weight:800;color:#f8fafc;">—</div>
+        </div>
+        <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:4px;">Views Today</div>
+          <div id="ig-warmup-views" style="font-size:24px;font-weight:800;color:#f8fafc;">—</div>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-bottom:12px;">
+        <button class="btn btn-amber" onclick="runWarmup('instagram', true)">&#128269; Dry Run IG Warmup</button>
+        <button class="btn btn-green" onclick="runWarmup('instagram', false)">&#9654;&#65039; Run Live IG Warmup</button>
+        <button class="btn btn-ghost" onclick="loadWarmupLog('instagram')">&#128203; View IG Log</button>
+      </div>
+      <div id="ig-warmup-spinner" class="spinner-wrap" style="display:none;">
+        <div class="spinner"></div><span id="ig-warmup-spinner-text">Running Instagram warmup...</span>
+      </div>
+      <div id="ig-warmup-output" class="log-box" style="display:none;margin-top:10px;"></div>
+      <div id="ig-warmup-log-wrap" style="display:none;margin-top:14px;">
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:8px;">Recent IG Warmup Actions</div>
+        <div id="ig-warmup-log-rows"></div>
+      </div>
+    </div>
+
+    <!-- ── TikTok Daily Warmup ─────────────────────────────────────────── -->
+    <div class="card">
+      <div class="section-title">&#127925; TikTok Daily Warmup</div>
+      <div class="alert alert-blue" style="margin-bottom:14px;">
+        Keeps your TikTok account healthy: views 10–20 videos, likes 8–15, follows 2–3 similar
+        accounts per day, and auto-unfollows after 4 days. Requires <code>TIKTOK_SESSION_ID</code>
+        in Railway Variables.
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+        <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:4px;">Likes Today</div>
+          <div id="tt-warmup-likes" style="font-size:24px;font-weight:800;color:#f8fafc;">—</div>
+        </div>
+        <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:4px;">Follows Today</div>
+          <div id="tt-warmup-follows" style="font-size:24px;font-weight:800;color:#f8fafc;">—</div>
+        </div>
+        <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:4px;">Views Today</div>
+          <div id="tt-warmup-views" style="font-size:24px;font-weight:800;color:#f8fafc;">—</div>
+        </div>
+      </div>
+      <div class="alert" style="background:#1c1917;border-color:#78716c;color:#d6d3d1;margin-bottom:12px;font-size:12px;">
+        <strong>How to get TIKTOK_SESSION_ID:</strong> Log into TikTok in Chrome &rarr;
+        DevTools (F12) &rarr; Application tab &rarr; Cookies &rarr; tiktok.com &rarr; copy the value of
+        <code>sessionid</code> &rarr; paste into Railway Variables as <code>TIKTOK_SESSION_ID</code>
+      </div>
+      <div class="btn-row" style="margin-bottom:12px;">
+        <button class="btn btn-amber" onclick="runWarmup('tiktok', true)">&#128269; Dry Run TikTok Warmup</button>
+        <button class="btn btn-green" onclick="runWarmup('tiktok', false)">&#9654;&#65039; Run Live TikTok Warmup</button>
+        <button class="btn btn-ghost" onclick="loadWarmupLog('tiktok')">&#128203; View TikTok Log</button>
+      </div>
+      <div id="tt-warmup-spinner" class="spinner-wrap" style="display:none;">
+        <div class="spinner"></div><span id="tt-warmup-spinner-text">Running TikTok warmup...</span>
+      </div>
+      <div id="tt-warmup-output" class="log-box" style="display:none;margin-top:10px;"></div>
+      <div id="tt-warmup-log-wrap" style="display:none;margin-top:14px;">
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:8px;">Recent TikTok Warmup Actions</div>
+        <div id="tt-warmup-log-rows"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ── HeyGen Video Generator Tab ─────────────────────────────────────── -->
@@ -1484,6 +1563,66 @@ async function loadRepinLog() {
 }
 
 // loadBoardConfig defined above in Manual Board Entry section
+
+// ── Social Warmup ────────────────────────────────────────────────────────────
+async function runWarmup(platform, dryRun) {
+  const prefix = platform === 'instagram' ? 'ig' : 'tt';
+  const spinner = document.getElementById(prefix + '-warmup-spinner');
+  const spinnerText = document.getElementById(prefix + '-warmup-spinner-text');
+  const output = document.getElementById(prefix + '-warmup-output');
+  spinner.style.display = 'flex';
+  spinnerText.textContent = (dryRun ? 'Dry run: ' : 'Running live ') + platform + ' warmup...';
+  output.style.display = 'block';
+  output.textContent = 'Starting ' + platform + ' warmup...';
+  try {
+    const resp = await fetch('/api/warmup/' + platform, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: dryRun }),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    output.textContent = data.output || (data.success ? 'Done' : 'Failed');
+    if (data.warmup_data) {
+      const wd = data.warmup_data;
+      document.getElementById(prefix + '-warmup-likes').textContent = wd.daily_likes || wd.total_likes || 0;
+      document.getElementById(prefix + '-warmup-follows').textContent = wd.daily_follows || wd.total_follows || 0;
+      document.getElementById(prefix + '-warmup-views').textContent = wd.total_views || 0;
+      if (wd.message) output.textContent += '\n\nSummary: ' + wd.message;
+    }
+  } catch(e) {
+    output.textContent = 'Error: ' + e.message;
+  } finally {
+    spinner.style.display = 'none';
+  }
+}
+
+async function loadWarmupLog(platform) {
+  const prefix = platform === 'instagram' ? 'ig' : 'tt';
+  const wrap = document.getElementById(prefix + '-warmup-log-wrap');
+  const rows = document.getElementById(prefix + '-warmup-log-rows');
+  wrap.style.display = 'block';
+  rows.innerHTML = '<div style="color:#64748b;font-size:13px;">Loading...</div>';
+  try {
+    const resp = await fetch('/api/warmup/' + platform + '/log', { headers: authHeaders() });
+    const data = await resp.json();
+    const entries = data.entries || [];
+    if (!entries.length) {
+      rows.innerHTML = '<div style="color:#64748b;font-size:13px;">No warmup actions logged yet.</div>';
+      return;
+    }
+    const actionIcon = { like: '♥', follow: '➕', unfollow: '➖', dry_run_session: '🔍', session: '▶' };
+    rows.innerHTML = entries.map(e => `
+      <div style="display:grid;grid-template-columns:140px 50px 1fr 80px;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid #1e293b;font-size:12px;">
+        <div style="color:#475569;">${e.ts ? e.ts.substring(0,16).replace('T',' ') : '—'}</div>
+        <div style="text-align:center;">${actionIcon[e.action] || e.action}</div>
+        <div style="color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@${e.target || '—'}</div>
+        <div style="color:${e.status === 'success' ? '#4ade80' : e.status === 'error' ? '#ef4444' : '#94a3b8'};">${e.status}</div>
+      </div>`).join('');
+  } catch(e) {
+    rows.innerHTML = '<div style="color:#ef4444;font-size:13px;">Error loading log: ' + e.message + '</div>';
+  }
+}
 
 // ── Init ─────────────────────────────────────────────────────────────────────────────
 loadStats();

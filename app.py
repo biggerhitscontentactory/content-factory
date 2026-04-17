@@ -641,6 +641,95 @@ def api_repin_log():
     return jsonify({"entries": list(reversed(entries[-50:]))})
 
 
+
+# ─── API: Instagram Warmup ────────────────────────────────────────────────────
+@app.route("/api/warmup/instagram", methods=["POST"])
+@login_required
+def api_ig_warmup():
+    """Run an Instagram warmup session (like, view, follow)."""
+    data = request.json or {}
+    dry_run = data.get("dry_run", True)
+    runner_path = os.path.join(MOD_DIR, "runner.py")
+    cmd = [sys.executable, runner_path, "--mode", "ig_warmup"]
+    if dry_run:
+        cmd.append("--dry-run")
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=300, cwd=BASE_DIR,
+            env={**os.environ, "PYTHONPATH": f"{BASE_DIR}:{MOD_DIR}"}
+        )
+        output = result.stdout + result.stderr
+        try:
+            lines = [l for l in result.stdout.strip().split("\n") if l.startswith("{")]
+            result_data = json.loads(lines[-1]) if lines else {}
+        except Exception:
+            result_data = {}
+        return jsonify({"success": result.returncode == 0, "output": output, "warmup_data": result_data})
+    except subprocess.TimeoutExpired:
+        return jsonify({"success": False, "output": "Timeout after 5 minutes"})
+    except Exception as e:
+        return jsonify({"success": False, "output": str(e)})
+
+@app.route("/api/warmup/instagram/log")
+@login_required
+def api_ig_warmup_log():
+    """Return recent Instagram warmup log entries."""
+    log_file = os.path.join(LOG_DIR, "ig_warmup.jsonl")
+    entries = []
+    if os.path.exists(log_file):
+        with open(log_file) as f:
+            for line in f:
+                try:
+                    entries.append(json.loads(line.strip()))
+                except Exception:
+                    pass
+    return jsonify({"entries": list(reversed(entries[-50:]))})
+
+# ─── API: TikTok Warmup ───────────────────────────────────────────────────────
+@app.route("/api/warmup/tiktok", methods=["POST"])
+@login_required
+def api_tiktok_warmup():
+    """Run a TikTok warmup session (like, view, follow)."""
+    data = request.json or {}
+    dry_run = data.get("dry_run", True)
+    runner_path = os.path.join(MOD_DIR, "runner.py")
+    cmd = [sys.executable, runner_path, "--mode", "tiktok_warmup"]
+    if dry_run:
+        cmd.append("--dry-run")
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=300, cwd=BASE_DIR,
+            env={**os.environ, "PYTHONPATH": f"{BASE_DIR}:{MOD_DIR}"}
+        )
+        output = result.stdout + result.stderr
+        try:
+            lines = [l for l in result.stdout.strip().split("\n") if l.startswith("{")]
+            result_data = json.loads(lines[-1]) if lines else {}
+        except Exception:
+            result_data = {}
+        return jsonify({"success": result.returncode == 0, "output": output, "warmup_data": result_data})
+    except subprocess.TimeoutExpired:
+        return jsonify({"success": False, "output": "Timeout after 5 minutes"})
+    except Exception as e:
+        return jsonify({"success": False, "output": str(e)})
+
+@app.route("/api/warmup/tiktok/log")
+@login_required
+def api_tiktok_warmup_log():
+    """Return recent TikTok warmup log entries."""
+    log_file = os.path.join(LOG_DIR, "tiktok_warmup.jsonl")
+    entries = []
+    if os.path.exists(log_file):
+        with open(log_file) as f:
+            for line in f:
+                try:
+                    entries.append(json.loads(line.strip()))
+                except Exception:
+                    pass
+    return jsonify({"entries": list(reversed(entries[-50:]))})
+
 # ─── API: Config Check ────────────────────────────────────────────────────────────────
 @app.route("/api/config_status")
 @login_required

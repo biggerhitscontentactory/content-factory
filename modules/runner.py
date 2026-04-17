@@ -462,7 +462,9 @@ def run_repin_batch(dry_run=False):
 # ─── CLI Entry Point ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Content Factory Runner")
-    parser.add_argument("--mode", choices=["ecommerce", "ai_channel", "get_accounts", "repin"],
+    parser.add_argument("--mode",
+                        choices=["ecommerce", "ai_channel", "get_accounts", "repin",
+                                 "ig_warmup", "tiktok_warmup"],
                         default="ecommerce")
     parser.add_argument("--count", type=int, default=5)
     parser.add_argument("--dry-run", action="store_true")
@@ -478,3 +480,13 @@ if __name__ == "__main__":
         get_oneup_account_ids()
     elif args.mode == "repin":
         run_repin_batch(dry_run=args.dry_run)
+    elif args.mode == "ig_warmup":
+        import importlib
+        ig_warmup_mod = importlib.import_module("ig_warmup")
+        result = ig_warmup_mod.run_warmup_session(dry_run=args.dry_run)
+        print(json.dumps(result, indent=2))
+    elif args.mode == "tiktok_warmup":
+        import importlib
+        tiktok_warmup_mod = importlib.import_module("tiktok_warmup")
+        result = tiktok_warmup_mod.run_warmup_session(dry_run=args.dry_run)
+        print(json.dumps(result, indent=2))
