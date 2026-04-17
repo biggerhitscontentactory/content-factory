@@ -8,3 +8,6 @@ reportlab==4.2.0
 pillow==10.3.0
 gunicorn==22.0.0
 apscheduler==3.10.4
+instagrapi==2.1.2
+TikTokApi==6.3.2
+playwright==1.44.0
