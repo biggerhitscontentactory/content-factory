@@ -26,7 +26,7 @@ from datetime import datetime, date
 from config import DATA_DIR
 
 PINTEREST_API_BASE = "https://api.pinterest.com/v5"
-PINTEREST_TOKEN    = os.environ.get("PINTEREST_ACCESS_TOKEN", "")
+# PINTEREST_TOKEN read at call time in _headers() to pick up Railway env vars
 
 REPIN_LOG_FILE     = os.path.join(DATA_DIR, "repin_log.json")
 REPIN_STATE_FILE   = os.path.join(DATA_DIR, "repin_state.json")
@@ -146,8 +146,9 @@ def log_repin(board_id, board_name, pin_id, keyword, dry_run=False):
 # ─── Pinterest API Helpers ────────────────────────────────────────────────────
 
 def _headers():
+    token = os.environ.get("PINTEREST_ACCESS_TOKEN", "")
     return {
-        "Authorization": f"Bearer {PINTEREST_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
 
@@ -160,7 +161,7 @@ def search_pins(keyword, count=20):
     following network. For broader search, we use the /pins endpoint with
     ad_account_id scope or rely on the organic search endpoint.
     """
-    if not PINTEREST_TOKEN:
+    if not os.environ.get("PINTEREST_ACCESS_TOKEN", ""):
         return []
 
     try:
@@ -196,7 +197,7 @@ def repin(board_id, source_pin_id):
     POST /v5/pins with parent_pin_id = source_pin_id
     Returns (success, new_pin_id or error)
     """
-    if not PINTEREST_TOKEN:
+    if not os.environ.get("PINTEREST_ACCESS_TOKEN", ""):
         return False, "PINTEREST_ACCESS_TOKEN not set"
 
     payload = {
@@ -267,7 +268,7 @@ def run_repin_session(repin_board_ids, board_name_map=None, dry_run=False):
     Returns:
         dict with summary: {total, by_board, skipped, errors, log}
     """
-    if not PINTEREST_TOKEN and not dry_run:
+    if not os.environ.get("PINTEREST_ACCESS_TOKEN", "") and not dry_run:
         return {"error": "PINTEREST_ACCESS_TOKEN not set. Add it in Railway env vars."}
 
     if not repin_board_ids:

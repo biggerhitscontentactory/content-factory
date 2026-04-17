@@ -560,7 +560,7 @@ function showTab(name) {
   event.target.classList.add('active');
   if (name === 'queue') loadQueuePreview();
   if (name === 'aichannel') loadTopics();
-  if (name === 'setup') loadConfigStatus();
+  if (name === 'setup') { loadConfigStatus(); loadBoardConfig(); }
 }
 
 // ── Stats ───────────────────────────────────────────────────────────────────
@@ -1155,6 +1155,237 @@ async function checkSingleVideo(videoId) {
     if (data.status === 'completed') refreshVideoLibrary();
   } catch(e) {
     alert('Error: ' + e.message);
+  }
+}
+
+
+// ── Pinterest Board Selector ──────────────────────────────────────────────────
+const TIER_OPTIONS = ['', '1', '2', '3'];
+const CATEGORY_OPTIONS = ['', 'Hats', 'Apparel', 'Home Decor', 'Gifts', 'Accessories', 'Jewelry', 'Books', 'Other'];
+
+let _boardsData = { boards: [], tier_map: {}, category_map: {}, default_board_id: '', repin_boards: [] };
+
+async function fetchBoards() {
+  const spinner = document.getElementById('board-spinner');
+  const output  = document.getElementById('board-output');
+  const wrap    = document.getElementById('board-list-wrap');
+  const saveBtn = document.getElementById('save-boards-btn');
+
+  spinner.style.display = 'flex';
+  output.style.display  = 'none';
+  wrap.style.display    = 'none';
+
+  try {
+    // First call /api/boards/refresh to pull fresh data from Pinterest API
+    const resp = await fetch('/api/boards/refresh', {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    if (!data.success) {
+      output.style.display = 'block';
+      output.textContent = '✗ ' + (data.message || 'Failed to fetch boards');
+      spinner.style.display = 'none';
+      return;
+    }
+
+    // Now load the full config (includes tier_map, category_map etc.)
+    const cfgResp = await fetch('/api/boards', { headers: authHeaders() });
+    const cfg = await cfgResp.json();
+    _boardsData = cfg;
+
+    renderBoardRows(cfg);
+    wrap.style.display = 'block';
+    saveBtn.disabled = false;
+
+    const lastFetched = document.getElementById('board-last-fetched');
+    lastFetched.textContent = `✓ ${data.boards.length} boards loaded from Pinterest`;
+
+    // Update repin count display
+    document.getElementById('repin-boards-count').textContent = cfg.repin_boards ? cfg.repin_boards.length : 0;
+
+  } catch(e) {
+    output.style.display = 'block';
+    output.textContent = 'Error fetching boards: ' + e.message;
+  } finally {
+    spinner.style.display = 'none';
+  }
+}
+
+function renderBoardRows(cfg) {
+  const boards     = cfg.boards || [];
+  const tierMap    = cfg.tier_map || {};
+  const catMap     = cfg.category_map || {};
+  const repinBoards = cfg.repin_boards || [];
+  const defaultId  = cfg.default_board_id || '';
+
+  const container = document.getElementById('board-rows');
+
+  // Build reverse maps: board_id -> tier, board_id -> category
+  const boardTier = {};
+  for (const [tier, bid] of Object.entries(tierMap)) boardTier[bid] = tier;
+  const boardCat = {};
+  for (const [cat, bid] of Object.entries(catMap)) boardCat[bid] = cat;
+
+  container.innerHTML = boards.map(b => {
+    const tierVal = boardTier[b.id] || '';
+    const catVal  = boardCat[b.id] || '';
+    const repinChecked = repinBoards.includes(b.id) ? 'checked' : '';
+
+    const tierOpts = TIER_OPTIONS.map(t =>
+      `<option value="${t}" ${t === tierVal ? 'selected' : ''}>${t ? 'Tier ' + t : '—'}</option>`
+    ).join('');
+
+    const catOpts = CATEGORY_OPTIONS.map(c =>
+      `<option value="${c}" ${c === catVal ? 'selected' : ''}>${c || '—'}</option>`
+    ).join('');
+
+    return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;align-items:center;padding:7px 4px;border-bottom:1px solid #1e293b;">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#f1f5f9;">${escHtml(b.name)}</div>
+        <div style="font-size:11px;color:#475569;">${b.pin_count || 0} pins &bull; ${b.privacy || 'PUBLIC'}</div>
+      </div>
+      <select data-board-id="${b.id}" data-type="tier" style="background:#1e293b;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:4px 6px;font-size:12px;width:100%;"
+        onchange="onBoardConfigChange()">${tierOpts}</select>
+      <select data-board-id="${b.id}" data-type="category" style="background:#1e293b;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:4px 6px;font-size:12px;width:100%;"
+        onchange="onBoardConfigChange()">${catOpts}</select>
+      <div style="text-align:center;">
+        <input type="checkbox" data-board-id="${b.id}" data-type="repin" ${repinChecked}
+          style="width:18px;height:18px;cursor:pointer;" onchange="onBoardConfigChange()">
+      </div>
+    </div>`;
+  }).join('');
+
+  // Populate default board select
+  const defSelect = document.getElementById('default-board-select');
+  defSelect.innerHTML = '<option value="">— Select default board —</option>' +
+    boards.map(b => `<option value="${b.id}" ${b.id === defaultId ? 'selected' : ''}>${escHtml(b.name)}</option>`).join('');
+  defSelect.onchange = onBoardConfigChange;
+}
+
+function onBoardConfigChange() {
+  document.getElementById('save-boards-btn').disabled = false;
+}
+
+async function saveBoardConfig() {
+  const tierMap = {};
+  const catMap  = {};
+  const repinBoards = [];
+
+  document.querySelectorAll('[data-type="tier"]').forEach(sel => {
+    if (sel.value) tierMap[sel.value] = sel.dataset.boardId;
+  });
+  document.querySelectorAll('[data-type="category"]').forEach(sel => {
+    if (sel.value) catMap[sel.value] = sel.dataset.boardId;
+  });
+  document.querySelectorAll('[data-type="repin"]:checked').forEach(cb => {
+    repinBoards.push(cb.dataset.boardId);
+  });
+  const defaultBoardId = document.getElementById('default-board-select').value;
+
+  const output = document.getElementById('board-output');
+  output.style.display = 'block';
+  output.textContent = 'Saving...';
+
+  try {
+    const resp = await fetch('/api/boards/save', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tier_map: tierMap, category_map: catMap, repin_boards: repinBoards, default_board_id: defaultBoardId }),
+    });
+    const data = await resp.json();
+    output.textContent = data.success
+      ? `✓ Saved! Tier map: ${JSON.stringify(tierMap)} | Repin boards: ${repinBoards.length}`
+      : '✗ ' + data.message;
+    document.getElementById('repin-boards-count').textContent = repinBoards.length;
+  } catch(e) {
+    output.textContent = 'Save error: ' + e.message;
+  }
+}
+
+// ── Pinterest Repinner ────────────────────────────────────────────────────────
+async function runRepin(dryRun) {
+  const spinner = document.getElementById('repin-spinner');
+  const spinnerText = document.getElementById('repin-spinner-text');
+  const output  = document.getElementById('repin-output');
+
+  spinner.style.display = 'flex';
+  spinnerText.textContent = dryRun ? 'Running dry run repin...' : 'Running live repin (25-45 pins)...';
+  output.style.display = 'block';
+  output.textContent = 'Starting repinner...';
+
+  try {
+    const resp = await fetch('/api/repin', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: dryRun }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    output.textContent = data.output || (data.success ? '✓ Done' : '✗ Failed');
+    if (data.repin_data) {
+      const rd = data.repin_data;
+      output.textContent += `\n\n📊 Summary:\n  Total repinned: ${rd.total}\n  Errors: ${rd.errors}\n  ${rd.message || ''}`;
+      document.getElementById('repin-today').textContent = rd.total || 0;
+    }
+  } catch(e) {
+    output.textContent = 'Error: ' + e.message;
+  } finally {
+    spinner.style.display = 'none';
+  }
+}
+
+async function loadRepinLog() {
+  const wrap = document.getElementById('repin-log-wrap');
+  const rows = document.getElementById('repin-log-rows');
+  wrap.style.display = 'block';
+  rows.innerHTML = '<div style="color:#64748b;font-size:13px;">Loading...</div>';
+
+  try {
+    const resp = await fetch('/api/repin_log', { headers: authHeaders() });
+    const data = await resp.json();
+    const entries = data.entries || [];
+    if (!entries.length) {
+      rows.innerHTML = '<div style="color:#64748b;font-size:13px;">No repins logged yet. Run a repin session first.</div>';
+      return;
+    }
+    rows.innerHTML = entries.map(e => `
+      <div style="display:grid;grid-template-columns:140px 1fr 120px 80px;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid #1e293b;font-size:12px;">
+        <div style="color:#475569;">${e.ts ? e.ts.substring(0,16).replace('T',' ') : '—'}</div>
+        <div style="color:#f1f5f9;font-weight:600;">${escHtml((e.title || e.pin_id || '').substring(0,60))}</div>
+        <div style="color:#94a3b8;">${escHtml(e.board_name || e.board_id || '—')}</div>
+        <div style="color:${e.dry_run ? '#f59e0b' : '#22c55e'};">${e.dry_run ? 'dry run' : 'live'}</div>
+      </div>`).join('');
+    document.getElementById('repin-today').textContent = entries.filter(e => {
+      const today = new Date().toISOString().substring(0,10);
+      return e.ts && e.ts.startsWith(today) && !e.dry_run;
+    }).length;
+  } catch(e) {
+    rows.innerHTML = '<div style="color:#ef4444;">Error: ' + e.message + '</div>';
+  }
+}
+
+// Load board config on Setup tab open (show cached boards if available)
+async function loadBoardConfig() {
+  try {
+    const resp = await fetch('/api/boards', { headers: authHeaders() });
+    const cfg  = await resp.json();
+    if (cfg.boards && cfg.boards.length > 0) {
+      _boardsData = cfg;
+      renderBoardRows(cfg);
+      document.getElementById('board-list-wrap').style.display = 'block';
+      document.getElementById('save-boards-btn').disabled = false;
+      document.getElementById('board-last-fetched').textContent =
+        `Cached: ${cfg.boards.length} boards${cfg.last_fetched ? ' (last fetched ' + cfg.last_fetched.substring(0,10) + ')' : ''}`;
+      document.getElementById('repin-boards-count').textContent = cfg.repin_boards ? cfg.repin_boards.length : 0;
+    }
+    if (cfg.pinterest_token === false) {
+      document.getElementById('board-token-warning').style.display = 'block';
+    }
+  } catch(e) {
+    // silently fail — boards just won't be pre-loaded
   }
 }
 

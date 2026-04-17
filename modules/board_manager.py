@@ -25,7 +25,8 @@ from datetime import datetime
 from config import DATA_DIR
 
 PINTEREST_API_BASE = "https://api.pinterest.com/v5"
-PINTEREST_TOKEN    = os.environ.get("PINTEREST_ACCESS_TOKEN", "")
+# PINTEREST_TOKEN is read at call time (see _pinterest_headers) to pick up Railway env vars
+PINTEREST_TOKEN = ""  # not used directly
 
 BOARD_CONFIG_FILE  = os.path.join(DATA_DIR, "board_config.json")
 
@@ -60,8 +61,9 @@ def save_board_config(config):
 # ─── Pinterest API Helpers ────────────────────────────────────────────────────
 
 def _pinterest_headers():
+    token = os.environ.get("PINTEREST_ACCESS_TOKEN", "")
     return {
-        "Authorization": f"Bearer {PINTEREST_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
 
@@ -71,7 +73,7 @@ def fetch_boards():
     Fetch all boards for the authenticated Pinterest user.
     Returns list of dicts: [{id, name, description, pin_count, privacy}]
     """
-    if not PINTEREST_TOKEN:
+    if not os.environ.get("PINTEREST_ACCESS_TOKEN", ""):
         return {"error": "PINTEREST_ACCESS_TOKEN not set in environment variables"}
 
     boards = []
@@ -208,7 +210,7 @@ def post_pin_to_board(board_id, title, description, image_url, link=None):
     Use this when board_id assignment is needed.
     Returns (success, pin_id or error_message)
     """
-    if not PINTEREST_TOKEN:
+    if not os.environ.get("PINTEREST_ACCESS_TOKEN", ""):
         return False, "PINTEREST_ACCESS_TOKEN not set"
     if not board_id:
         return False, "No board_id provided"
