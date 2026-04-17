@@ -154,17 +154,29 @@ def upload_image_to_hosting(image_path):
     """Convert local image path to public URL via Railway app."""
     if not image_path or not os.path.exists(image_path):
         return None
-    railway_url = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "") or os.environ.get("APP_URL", "")
+    # Try multiple env vars Railway may set
+    railway_url = (
+        os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+        or os.environ.get("APP_URL", "")
+        or os.environ.get("RAILWAY_STATIC_URL", "")
+    )
+    # Strip protocol prefix if present
+    if railway_url.startswith("https://"):
+        railway_url = railway_url[8:]
+    elif railway_url.startswith("http://"):
+        railway_url = railway_url[7:]
     if not railway_url:
+        print(f"[Scheduler] WARNING: No APP_URL/RAILWAY_PUBLIC_DOMAIN set — cannot build image URL for OneUp")
+        print(f"[Scheduler] Set APP_URL=web-production-128b8.up.railway.app in Railway Variables")
         return None
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     output_dir = os.path.join(base_dir, "output")
     static_dir = os.path.join(base_dir, "static")
     if image_path.startswith(output_dir):
-        rel = os.path.relpath(image_path, output_dir)
+        rel = os.path.relpath(image_path, output_dir).replace(os.sep, "/")
         return f"https://{railway_url}/output/{rel}"
     if image_path.startswith(static_dir):
-        rel = os.path.relpath(image_path, static_dir)
+        rel = os.path.relpath(image_path, static_dir).replace(os.sep, "/")
         return f"https://{railway_url}/static/{rel}"
     return None
 
@@ -198,9 +210,15 @@ def schedule_post_oneup(social_network_id, text, image_paths=None, scheduled_at=
     image_urls = []
     if image_paths:
         for p in image_paths:
-            url = upload_image_to_hosting(p)
-            if url:
-                image_urls.append(url)
+            if p and os.path.exists(p):
+                url = upload_image_to_hosting(p)
+                if url:
+                    image_urls.append(url)
+                else:
+                    print(f"[Scheduler] Could not build public URL for image: {p}")
+                    print(f"[Scheduler] Post will be sent as text-only (no image)")
+            elif p:
+                print(f"[Scheduler] Image path does not exist: {p}")
     try:
         if image_urls:
             payload = {
@@ -293,7 +311,12 @@ def schedule_ecommerce_content_pack(content_pack, images, account_ids, base_time
             scheduled["pinterest_1"] = {"scheduled_at": str(post_time)}
     if account_ids.get("facebook") and fb:
         post_time = get_next_post_time("facebook", current_time)
-        text = fb.get("text", "") + (f"\n\n{product_url}" if product_url else "")
+        fb_hashtags = fb.get("hashtags", "")
+        text = fb.get("text", "")
+        if fb_hashtags:
+            text = f"{text}\n\n{fb_hashtags}"
+        if product_url:
+            text = f"{text}\n\n{product_url}"
         img = [images.get("facebook")] if images.get("facebook") else []
         result = schedule_post_oneup(account_ids["facebook"], text, img, post_time, category_id=category_id, dry_run=dry_run)
         if result:
@@ -322,7 +345,12 @@ def schedule_ecommerce_content_pack(content_pack, images, account_ids, base_time
     if account_ids.get("tiktok") and tiktok_post:
         post_time = get_next_post_time("tiktok", day3)
         script = tiktok_post.get("script", tiktok_post.get("hook", ""))
-        text = f"{script}\n\n{product_url}" if product_url else script
+        tt_hashtags = tiktok_post.get("hashtags", "")
+        text = script
+        if tt_hashtags:
+            text = f"{text}\n\n{tt_hashtags}"
+        if product_url:
+            text = f"{text}\n\n{product_url}"
         img = [images.get("tiktok")] if images.get("tiktok") else []
         result = schedule_post_oneup(account_ids["tiktok"], text, img, post_time, category_id=category_id, dry_run=dry_run)
         if result:

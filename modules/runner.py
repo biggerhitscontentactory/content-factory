@@ -56,20 +56,25 @@ from config import (
 )
 
 # ─── Account IDs from Environment Variables ───────────────────────────────────
-ACCOUNT_IDS = {
-    "ecommerce": {
-        "pinterest": os.environ.get("ONEUP_PINTEREST_ID", ""),
-        "instagram": os.environ.get("ONEUP_INSTAGRAM_ID", ""),
-        "facebook":  os.environ.get("ONEUP_FACEBOOK_ID",  ""),
-        "tiktok":    os.environ.get("ONEUP_TIKTOK_ID",    ""),
-        "youtube":   os.environ.get("ONEUP_YOUTUBE_ID",   ""),
-        "twitter":   os.environ.get("ONEUP_TWITTER_ID",   ""),
-    },
-    "ai_channel": {
-        "linkedin":  os.environ.get("ONEUP_LINKEDIN_ID",  ""),
-        "twitter":   os.environ.get("ONEUP_TWITTER_ID",   ""),
+# Read at call time (not import time) so Railway env vars are always current.
+def _get_account_ids():
+    return {
+        "ecommerce": {
+            "pinterest": os.environ.get("ONEUP_PINTEREST_ID", ""),
+            "instagram": os.environ.get("ONEUP_INSTAGRAM_ID", ""),
+            "facebook":  os.environ.get("ONEUP_FACEBOOK_ID",  ""),
+            "tiktok":    os.environ.get("ONEUP_TIKTOK_ID",    ""),
+            "youtube":   os.environ.get("ONEUP_YOUTUBE_ID",   ""),
+            "twitter":   os.environ.get("ONEUP_TWITTER_ID",   ""),
+        },
+        "ai_channel": {
+            "linkedin":  os.environ.get("ONEUP_LINKEDIN_ID",  ""),
+            "twitter":   os.environ.get("ONEUP_TWITTER_ID",   ""),
+        }
     }
-}
+
+# Keep ACCOUNT_IDS as a property for backwards compatibility
+ACCOUNT_IDS = _get_account_ids()
 
 
 # ─── Ecommerce Batch ──────────────────────────────────────────────────────────
@@ -88,6 +93,17 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
     print(f"ECOMMERCE CONTENT FACTORY — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"Mode: {'DRY RUN' if dry_run else 'LIVE'} | Batch size: {count}")
     print(f"Daily post status: {get_daily_summary()}")
+    # Diagnostic: show which account IDs are loaded
+    fresh_ids = _get_account_ids()["ecommerce"]
+    configured = [p for p, v in fresh_ids.items() if v]
+    missing = [p for p, v in fresh_ids.items() if not v]
+    print(f"OneUp accounts configured: {configured or 'NONE'}")
+    if missing:
+        print(f"OneUp accounts NOT set: {missing}")
+    cat_id = os.environ.get("ONEUP_CATEGORY_ID", "")
+    print(f"OneUp category ID: {cat_id or 'NOT SET — posts will fail'}")
+    app_url = os.environ.get("APP_URL", "") or os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+    print(f"App URL for image hosting: {app_url or 'NOT SET — images will be text-only'}")
     print(f"{'='*60}\n")
 
     processed = 0
@@ -142,8 +158,9 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
             scheduled = {}
             if not dry_run:
                 print("[Runner] Scheduling posts via OneUp...")
+                fresh_ids = _get_account_ids()
                 scheduled = schedule_ecommerce_content_pack(
-                    content_pack, images, ACCOUNT_IDS["ecommerce"],
+                    content_pack, images, fresh_ids["ecommerce"],
                     dry_run=False
                 )
                 log_scheduled_posts(scheduled, title, "ecommerce")
