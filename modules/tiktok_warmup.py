@@ -140,8 +140,9 @@ async def _get_tiktok_api():
         from TikTokApi import TikTokApi
     except ImportError:
         raise ImportError(
-            "TikTokApi not installed. Run: pip install TikTokApi playwright && "
-            "python -m playwright install chromium"
+            "TikTok warmup requires TikTokApi + Playwright (Chromium). "
+            "These require system-level dependencies not available on Railway's standard builder. "
+            "TikTok warmup is currently unavailable on this deployment."
         )
     session_id = os.environ.get("TIKTOK_SESSION_ID", "")
     if not session_id:
