@@ -1706,10 +1706,13 @@ async function loadBlogStatus() {
     const r = await fetch('/api/blog/status', {headers: authHeaders()});
     const d = await r.json();
     const el = document.getElementById('blog-shopify-status');
-    if (d.shopify_configured) {
+    if (d.shopify_authorized) {
       el.innerHTML = `<span style="color:#22c55e;">✓ Connected to <strong>${d.shopify_domain}</strong></span>`;
+    } else if (d.shopify_configured && !d.shopify_authorized) {
+      el.innerHTML = `<span style="color:#f59e0b;">⚠ App credentials found but not yet authorized.</span>
+        <a href="/shopify/install" style="display:inline-block;background:#22c55e;color:white;padding:6px 16px;border-radius:6px;font-size:13px;text-decoration:none;margin-left:10px;font-weight:600;">🔗 Connect Shopify</a>`;
     } else {
-      el.innerHTML = `<span style="color:#ef4444;">✗ Not configured — add SHOPIFY_API_KEY and SHOPIFY_STORE_DOMAIN in Railway Variables</span>`;
+      el.innerHTML = `<span style="color:#ef4444;">✗ Not configured — add SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET in Railway Variables</span>`;
     }
   } catch(e) {
     document.getElementById('blog-shopify-status').textContent = 'Could not check Shopify status.';
@@ -1758,6 +1761,11 @@ async function runBlogGenerate(dryRun) {
     lines.push('');
     if (d.steps && d.steps.length) {
       d.steps.forEach(s => lines.push(s));
+    }
+    if (d.status === 'needs_auth') {
+      outputEl.innerHTML = `<span style="color:#f59e0b;">⚠ Shopify not connected yet.</span><br><br>
+        <a href="/shopify/install" style="display:inline-block;background:#22c55e;color:white;padding:8px 20px;border-radius:6px;text-decoration:none;font-weight:600;">🔗 Connect Shopify Now</a>`;
+      return;
     }
     if (d.error) lines.push(`ERROR: ${d.error}`);
     if (d.article_url) lines.push(`\nLive URL: ${d.article_url}`);

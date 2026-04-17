@@ -1,507 +1,420 @@
 """
 Content Factory — Shopify Blog Generator
 ==========================================
-Generates SEO-optimized blog posts with embedded store products
-and publishes them directly to Shopify.
+Uses Shopify OAuth (Client ID + Client Secret) to authenticate.
 
-Flow:
-  1. Fetch matching products from Shopify store by keyword/tag
-  2. Generate full blog post HTML via OpenAI (GPT-4.1)
-  3. Generate hero image via DALL-E 3
-  4. Upload hero image to Shopify Files API
-  5. Create blog post on Shopify with published status
-  6. Return the live URL
+First-time setup:
+  1. User clicks "Connect Shopify" in the Blog tab
+  2. They are redirected to Shopify's OAuth approval page
+  3. After approving, Shopify redirects back to /shopify/callback
+  4. The callback exchanges the code for a permanent access token
+  5. Token is saved to data/shopify_token.json and reused forever
 
 Requires env vars:
-  SHOPIFY_API_KEY       — Admin API access token (shpat_...)
-  SHOPIFY_STORE_DOMAIN  — e.g. officialusastore.myshopify.com
-  OPENAI_API_KEY        — for GPT-4.1 + DALL-E 3
+  SHOPIFY_CLIENT_ID      — OAuth Client ID (from Shopify Partners)
+  SHOPIFY_CLIENT_SECRET  — OAuth Client Secret (shpss_...)
+  SHOPIFY_STORE_DOMAIN   — e.g. officialusastore.myshopify.com
+  APP_URL                — Railway public domain (no https://)
+  OPENAI_API_KEY         — for GPT-4.1-mini + DALL-E 3
 """
 
 import os
 import re
 import json
 import base64
+import hashlib
+import hmac as _hmac
 import requests
 from datetime import datetime
-from openai import OpenAI
 
-# ─── Shopify client helpers ───────────────────────────────────────────────────
+BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR   = os.path.join(BASE_DIR, "data")
+TOKEN_FILE = os.path.join(DATA_DIR, "shopify_token.json")
+os.makedirs(DATA_DIR, exist_ok=True)
 
-def _shopify_headers():
-    token = os.environ.get("SHOPIFY_API_KEY", "")
+# ─── Config helpers ───────────────────────────────────────────────────────────
+
+def _cfg():
     return {
-        "X-Shopify-Access-Token": token,
-        "Content-Type": "application/json",
+        "client_id":     os.environ.get("SHOPIFY_CLIENT_ID",     os.environ.get("SHOPIFY_API_KEY", "")),
+        "client_secret": os.environ.get("SHOPIFY_CLIENT_SECRET", os.environ.get("SHOPIFY_SECRET_KEY", "")),
+        "store_domain":  os.environ.get("SHOPIFY_STORE_DOMAIN",  "officialusastore.myshopify.com").strip().strip("/"),
+        "app_url":       os.environ.get("APP_URL", "web-production-128b8.up.railway.app").strip().strip("/"),
     }
 
-def _shopify_base():
-    domain = os.environ.get("SHOPIFY_STORE_DOMAIN", "").strip().rstrip("/")
+def shopify_configured():
+    c = _cfg()
+    return bool(c["client_id"] and c["client_secret"])
+
+# ─── Token persistence ────────────────────────────────────────────────────────
+
+def get_access_token():
+    try:
+        with open(TOKEN_FILE) as f:
+            return json.load(f).get("access_token", "")
+    except Exception:
+        return ""
+
+def save_access_token(token, scope=""):
+    with open(TOKEN_FILE, "w") as f:
+        json.dump({"access_token": token, "scope": scope, "saved_at": datetime.now().isoformat()}, f)
+
+def is_authorized():
+    return bool(get_access_token())
+
+# ─── OAuth helpers ────────────────────────────────────────────────────────────
+
+def get_install_url():
+    c = _cfg()
+    scopes = "read_products,write_content,read_content"
+    redirect_uri = f"https://{c['app_url']}/shopify/callback"
+    return (
+        f"https://{c['store_domain']}/admin/oauth/authorize"
+        f"?client_id={c['client_id']}"
+        f"&scope={scopes}"
+        f"&redirect_uri={redirect_uri}"
+        f"&state=cf-blog-connect"
+    )
+
+def exchange_code_for_token(code):
+    """Exchange OAuth code for a permanent access token. Saves and returns it."""
+    c = _cfg()
+    resp = requests.post(
+        f"https://{c['store_domain']}/admin/oauth/access_token",
+        json={"client_id": c["client_id"], "client_secret": c["client_secret"], "code": code},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    token = data.get("access_token", "")
+    scope = data.get("scope", "")
+    if token:
+        save_access_token(token, scope)
+    return token
+
+def verify_shopify_hmac(params: dict) -> bool:
+    """Verify Shopify's HMAC on the OAuth callback."""
+    c = _cfg()
+    hmac_value = params.get("hmac", "")
+    message = "&".join(f"{k}={v}" for k, v in sorted(params.items()) if k != "hmac")
+    digest = _hmac.new(c["client_secret"].encode(), message.encode(), hashlib.sha256).hexdigest()
+    return _hmac.compare_digest(digest, hmac_value)
+
+# ─── Shopify REST API client ──────────────────────────────────────────────────
+
+def _headers():
+    token = get_access_token()
+    if not token:
+        raise RuntimeError("Shopify not connected. Click 'Connect Shopify' in the Blog tab first.")
+    return {"X-Shopify-Access-Token": token, "Content-Type": "application/json"}
+
+def _base():
+    domain = _cfg()["store_domain"]
     if not domain.startswith("http"):
         domain = "https://" + domain
     return f"{domain}/admin/api/2024-01"
 
-def shopify_configured():
-    return bool(
-        os.environ.get("SHOPIFY_API_KEY", "").strip() and
-        os.environ.get("SHOPIFY_STORE_DOMAIN", "").strip()
-    )
+def _get(path, params=None):
+    r = requests.get(f"{_base()}/{path}", headers=_headers(), params=params, timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+def _post(path, payload):
+    r = requests.post(f"{_base()}/{path}", headers=_headers(), json=payload, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+def _put(path, payload):
+    r = requests.put(f"{_base()}/{path}", headers=_headers(), json=payload, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+def _delete(path):
+    r = requests.delete(f"{_base()}/{path}", headers=_headers(), timeout=10)
+    return r.status_code
 
 # ─── Product fetching ─────────────────────────────────────────────────────────
 
-def fetch_products(keyword, limit=10):
-    """
-    Fetch products from Shopify that match the keyword.
-    Searches title and tags. Returns list of product dicts.
-    """
-    base = _shopify_base()
-    headers = _shopify_headers()
+def fetch_products(keyword="patriotic", limit=10):
+    data = _get("products.json", params={"limit": 50, "status": "active"})
+    all_products = data.get("products", [])
+    kw = keyword.lower()
+    words = kw.split()
 
-    # Try tag search first
-    products = []
-    try:
-        # Search by title contains keyword
-        resp = requests.get(
-            f"{base}/products.json",
-            headers=headers,
-            params={"limit": 50, "status": "active"},
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            all_products = resp.json().get("products", [])
-            kw_lower = keyword.lower()
-            # Score and filter products by relevance to keyword
-            scored = []
-            for p in all_products:
-                score = 0
-                title_lower = p.get("title", "").lower()
-                tags_lower = p.get("tags", "").lower()
-                body_lower = p.get("body_html", "").lower()
-                if kw_lower in title_lower:
-                    score += 10
-                for word in kw_lower.split():
-                    if word in title_lower:
-                        score += 3
-                    if word in tags_lower:
-                        score += 2
-                    if word in body_lower:
-                        score += 1
-                if score > 0:
-                    scored.append((score, p))
-            # Sort by score, take top N
-            scored.sort(key=lambda x: x[0], reverse=True)
-            products = [p for _, p in scored[:limit]]
+    scored = []
+    for p in all_products:
+        title = p.get("title", "").lower()
+        tags  = p.get("tags", "").lower()
+        body  = p.get("body_html", "").lower()
+        score = 0
+        if kw in title: score += 10
+        for w in words:
+            if w in title: score += 3
+            if w in tags:  score += 2
+            if w in body:  score += 1
+        scored.append((score, p))
 
-            # If not enough matches, just take first N active products
-            if len(products) < 3:
-                products = all_products[:limit]
-    except Exception as e:
-        print(f"[Blog] Error fetching products: {e}")
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = [p for _, p in scored[:limit]] if scored[0][0] > 0 else [p for _, p in scored[:limit]]
 
-    # Format for use in blog
-    formatted = []
-    for p in products:
-        # Get first image
-        images = p.get("images", [])
-        image_url = images[0].get("src", "") if images else ""
+    domain = _cfg()["store_domain"]
+    storefront = domain.replace(".myshopify.com", ".com") if ".myshopify.com" in domain else domain
 
-        # Get price from first variant
+    result = []
+    for p in top:
+        images   = p.get("images", [])
         variants = p.get("variants", [])
-        price = variants[0].get("price", "0.00") if variants else "0.00"
-
-        # Get handle for URL
-        handle = p.get("handle", "")
-        domain = os.environ.get("SHOPIFY_STORE_DOMAIN", "").replace(".myshopify.com", "")
-        # Try to build the actual storefront URL
-        store_domain = os.environ.get("SHOPIFY_STORE_DOMAIN", "")
-        if "myshopify" in store_domain:
-            # Use custom domain if available, otherwise myshopify
-            product_url = f"https://{store_domain}/products/{handle}"
-        else:
-            product_url = f"https://{store_domain}/products/{handle}"
-
-        formatted.append({
-            "id": p.get("id"),
-            "title": p.get("title", ""),
-            "handle": handle,
-            "price": price,
-            "image_url": image_url,
-            "product_url": product_url,
-            "tags": p.get("tags", ""),
-            "body_html": p.get("body_html", ""),
+        handle   = p.get("handle", "")
+        result.append({
+            "id":          p.get("id"),
+            "title":       p.get("title", ""),
+            "handle":      handle,
+            "price":       variants[0].get("price", "0.00") if variants else "0.00",
+            "image_url":   images[0].get("src", "") if images else "",
+            "product_url": f"https://{storefront}/products/{handle}",
+            "tags":        p.get("tags", ""),
         })
-
-    return formatted
+    return result
 
 # ─── Blog content generation ──────────────────────────────────────────────────
 
-def generate_blog_content(topic, products, store_name="Official USA Store"):
-    """
-    Generate a full SEO blog post using GPT-4.1.
-    Returns dict: {title, meta_description, body_html, tags}
-    """
+def generate_blog_content(topic, products):
+    from openai import OpenAI
     client = OpenAI()
 
-    # Build product context for the prompt
-    product_list = ""
-    for i, p in enumerate(products[:8], 1):
-        product_list += f"{i}. {p['title']} — ${p['price']} — {p['product_url']}\n"
+    product_list = "\n".join(
+        f"{i}. {p['title']} — ${p['price']} — {p['product_url']} — image: {p['image_url']}"
+        for i, p in enumerate(products[:8], 1)
+    )
 
-    prompt = f"""You are a professional content writer for {store_name}, a patriotic American merchandise store.
+    prompt = f"""You are a professional content writer for OfficialUSAStore.com, a patriotic American merchandise store.
 
 Write a complete, SEO-optimized blog post about: "{topic}"
 
-Store products to feature in the post (embed 5-8 of these naturally throughout the article):
+Products to feature (embed 5-8 naturally throughout the article):
 {product_list}
 
 Requirements:
-- Length: 900–1,200 words
-- Tone: Enthusiastic, patriotic, conversational — like a knowledgeable American lifestyle blogger
-- Structure:
-  * Compelling H1 title (different from the topic, more engaging)
-  * Introduction paragraph (hook the reader, 2-3 sentences)
-  * 3-4 H2 sections with 2-3 paragraphs each
-  * Embed products naturally within sections (not as a separate list at the end)
-  * Closing paragraph with a strong CTA to shop
-- For each product embed, use this exact HTML format:
-  <div class="product-embed">
-    <img src="PRODUCT_IMAGE_URL" alt="PRODUCT_TITLE" style="max-width:300px;border-radius:8px;">
-    <h3><a href="PRODUCT_URL">PRODUCT_TITLE</a></h3>
-    <p class="product-price">$PRODUCT_PRICE</p>
-    <a href="PRODUCT_URL" class="shop-btn" style="display:inline-block;background:#b91c1c;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;margin-top:8px;">Shop Now →</a>
-  </div>
+- Length: 900-1,200 words
+- Tone: Enthusiastic, patriotic, conversational American lifestyle blogger
+- Structure: Compelling H1 title → intro → 3-4 H2 sections → closing CTA
+- For each product embed, use EXACTLY this HTML (fill in real values):
+<div class="product-embed" style="background:#f9f9f9;border:1px solid #e5e7eb;border-radius:10px;padding:20px;margin:24px 0;max-width:340px;display:inline-block;vertical-align:top;">
+  <img src="PRODUCT_IMAGE_URL" alt="PRODUCT_TITLE" style="width:100%;border-radius:6px;margin-bottom:12px;">
+  <h3 style="margin:0 0 6px;font-size:16px;"><a href="PRODUCT_URL" style="color:#1e3a5f;text-decoration:none;">PRODUCT_TITLE</a></h3>
+  <p style="font-size:18px;font-weight:bold;color:#b91c1c;margin:4px 0 10px;">$PRODUCT_PRICE</p>
+  <a href="PRODUCT_URL" style="display:inline-block;background:#b91c1c;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">Shop Now →</a>
+</div>
 - Use real product URLs, images, and prices from the list above
-- SEO: Include the main topic keyword naturally 4-6 times
-- Do NOT use placeholder text — write real, publish-ready content
+- Include the main topic keyword naturally 4-6 times
+- Write real, publish-ready content — no placeholders
 
-Return a JSON object with these exact fields:
+Return ONLY valid JSON (no markdown fences):
 {{
   "title": "The H1 blog post title",
   "meta_description": "155-character SEO meta description",
-  "body_html": "The complete HTML body of the post (everything after the H1)",
+  "body_html": "The complete HTML body (everything after the H1 title)",
   "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
-}}
+}}"""
 
-Return ONLY the JSON, no markdown code blocks, no extra text."""
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.8,
-            max_tokens=3000,
-        )
-        raw = response.choices[0].message.content.strip()
-        # Strip markdown code blocks if present
-        raw = re.sub(r'^```json\s*', '', raw)
-        raw = re.sub(r'\s*```$', '', raw)
-        data = json.loads(raw)
-        return data
-    except json.JSONDecodeError as e:
-        print(f"[Blog] JSON parse error: {e}\nRaw: {raw[:200]}")
-        # Fallback: return basic structure
-        return {
-            "title": topic,
-            "meta_description": f"Discover the best {topic} at {store_name}. Shop patriotic American merchandise.",
-            "body_html": f"<p>Content about {topic} coming soon.</p>",
-            "tags": ["patriotic", "american", "gifts", "usa"],
-        }
-    except Exception as e:
-        print(f"[Blog] Content generation error: {e}")
-        raise
+    response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.8,
+        max_tokens=3500,
+    )
+    raw = response.choices[0].message.content.strip()
+    raw = re.sub(r'^```json\s*', '', raw)
+    raw = re.sub(r'\s*```$', '', raw)
+    return json.loads(raw)
 
 # ─── Hero image generation ────────────────────────────────────────────────────
 
 def generate_hero_image(topic):
-    """
-    Generate a hero image for the blog post using DALL-E 3.
-    Returns base64-encoded PNG data.
-    """
+    """Generate a wide hero image. Returns base64 string or None."""
+    from openai import OpenAI
     client = OpenAI()
-
-    image_prompt = (
-        f"Wide-format lifestyle photography for a patriotic American merchandise blog post about '{topic}'. "
-        "Warm, inviting scene with American flags, red white and blue color palette, natural lighting. "
-        "High quality editorial photography style, no text, no watermarks, photorealistic."
-    )
-
     try:
-        response = client.images.generate(
+        resp = client.images.generate(
             model="dall-e-3",
-            prompt=image_prompt,
+            prompt=(
+                f"Wide-format lifestyle photography for a patriotic American blog post about '{topic}'. "
+                "American flags, red white and blue colors, warm natural lighting, editorial photography style. "
+                "No text, no watermarks, photorealistic."
+            ),
             size="1792x1024",
             quality="standard",
             n=1,
             response_format="b64_json",
         )
-        return response.data[0].b64_json
+        return resp.data[0].b64_json
     except Exception as e:
-        print(f"[Blog] Hero image generation error: {e}")
+        print(f"[Blog] Hero image error: {e}")
         return None
 
-# ─── Shopify image upload ─────────────────────────────────────────────────────
+# ─── Image upload to Shopify CDN ──────────────────────────────────────────────
 
-def upload_image_to_shopify(b64_data, filename):
-    """
-    Upload a base64 image to Shopify and return the CDN URL.
-    Uses the Product Images workaround since Files API requires GraphQL.
-    Returns image URL string or None.
-    """
-    base = _shopify_base()
-    headers = _shopify_headers()
-
-    # Create a temporary product to host the image, then delete it
-    # This is the most reliable REST API approach for image hosting
+def upload_hero_image(b64_data, topic):
+    """Upload hero image via a temp draft product, return CDN URL."""
+    filename = f"blog-hero-{topic.lower().replace(' ', '-')[:40]}.png"
     try:
-        # Upload via custom_collections image (simpler than products)
-        # Actually use the theme assets approach via a blog article image
-        # Simplest: just return the b64 as a data URI embedded in the post
-        # For production, upload to a public CDN
-        # We'll use the Shopify metafield/file approach via multipart
-        image_bytes = base64.b64decode(b64_data)
-
-        # Try uploading as a product image on a draft product
-        product_payload = {
+        resp = _post("products.json", {
             "product": {
                 "title": f"__blog_hero_{filename}",
                 "status": "draft",
                 "images": [{"attachment": b64_data, "filename": filename}],
             }
-        }
-        resp = requests.post(
-            f"{base}/products.json",
-            headers=headers,
-            json=product_payload,
-            timeout=30,
-        )
-        if resp.status_code == 201:
-            product = resp.json().get("product", {})
-            product_id = product.get("id")
-            images = product.get("images", [])
-            image_url = images[0].get("src", "") if images else ""
-
-            # Schedule deletion of the temp product (we just need the image URL)
-            # Actually keep it — Shopify deletes images when product is deleted
-            # Instead, just use the URL (it's permanent on Shopify CDN)
-            # Clean up the temp product
-            try:
-                requests.delete(
-                    f"{base}/products/{product_id}.json",
-                    headers=headers,
-                    timeout=10,
-                )
-            except Exception:
-                pass
-
-            # The image URL is still valid even after product deletion on Shopify CDN
-            return image_url
+        })
+        product = resp.get("product", {})
+        product_id = product.get("id")
+        images = product.get("images", [])
+        image_url = images[0].get("src", "") if images else ""
+        # Clean up temp product (image URL persists on CDN)
+        if product_id:
+            try: _delete(f"products/{product_id}.json")
+            except Exception: pass
+        return image_url
     except Exception as e:
         print(f"[Blog] Image upload error: {e}")
+        return None
 
-    return None
+# ─── Blog/article creation ────────────────────────────────────────────────────
 
-# ─── Shopify blog post creation ───────────────────────────────────────────────
+def get_or_create_blog(title="News"):
+    data = _get("blogs.json")
+    blogs = data.get("blogs", [])
+    if blogs:
+        return blogs[0]["id"], blogs[0].get("handle", "news")
+    result = _post("blogs.json", {"blog": {"title": title, "commentable": "no"}})
+    blog = result.get("blog", {})
+    return blog.get("id"), blog.get("handle", "news")
 
-def get_or_create_blog(blog_title="News"):
-    """Get the first blog ID, or create one if none exist."""
-    base = _shopify_base()
-    headers = _shopify_headers()
-
-    try:
-        resp = requests.get(f"{base}/blogs.json", headers=headers, timeout=10)
-        if resp.status_code == 200:
-            blogs = resp.json().get("blogs", [])
-            if blogs:
-                return blogs[0]["id"], blogs[0]["title"]
-            # Create a blog
-            create_resp = requests.post(
-                f"{base}/blogs.json",
-                headers=headers,
-                json={"blog": {"title": blog_title, "commentable": "no"}},
-                timeout=10,
-            )
-            if create_resp.status_code == 201:
-                blog = create_resp.json().get("blog", {})
-                return blog["id"], blog["title"]
-    except Exception as e:
-        print(f"[Blog] Error getting/creating blog: {e}")
-    return None, None
-
-def publish_blog_post(blog_id, title, body_html, meta_description, tags,
-                      hero_image_url=None, author="USA Store Team"):
-    """
-    Create and publish a blog article on Shopify.
-    Returns (article_id, article_url) or raises on error.
-    """
-    base = _shopify_base()
-    headers = _shopify_headers()
-
-    # Build the full HTML with hero image at top
-    full_body = ""
-    if hero_image_url:
-        full_body += (
-            f'<img src="{hero_image_url}" alt="{title}" '
-            f'style="width:100%;max-height:500px;object-fit:cover;border-radius:10px;margin-bottom:24px;">\n\n'
-        )
-    full_body += body_html
-
-    # Add product embed styles if not already in body
-    style_block = """
-<style>
-.product-embed {
-  background: #f9f9f9;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 20px;
-  margin: 24px 0;
-  display: inline-block;
-  max-width: 340px;
-  vertical-align: top;
-}
-.product-embed img { width: 100%; border-radius: 6px; margin-bottom: 12px; }
-.product-embed h3 { margin: 0 0 6px; font-size: 16px; }
-.product-embed h3 a { color: #1e3a5f; text-decoration: none; }
-.product-embed .product-price { font-size: 18px; font-weight: bold; color: #b91c1c; margin: 4px 0 10px; }
-</style>
-"""
-    full_body = style_block + full_body
-
+def publish_article(blog_id, title, body_html, meta_description, tags, hero_url=None):
+    style = """<style>
+.product-embed{background:#f9f9f9;border:1px solid #e5e7eb;border-radius:10px;padding:20px;margin:24px 0;max-width:340px;display:inline-block;vertical-align:top;}
+.product-embed img{width:100%;border-radius:6px;margin-bottom:12px;}
+</style>\n"""
+    hero_html = (
+        f'<img src="{hero_url}" alt="{title}" '
+        f'style="width:100%;max-height:480px;object-fit:cover;border-radius:10px;margin-bottom:24px;">\n\n'
+        if hero_url else ""
+    )
+    full_body = style + hero_html + body_html
     tags_str = ", ".join(tags) if isinstance(tags, list) else tags
 
-    article_payload = {
+    result = _post(f"blogs/{blog_id}/articles.json", {
         "article": {
             "title": title,
-            "author": author,
+            "author": "USA Store Team",
             "body_html": full_body,
             "summary_html": meta_description,
             "tags": tags_str,
             "published": True,
-            "metafields": [
-                {
-                    "key": "description_tag",
-                    "value": meta_description,
-                    "type": "single_line_text_field",
-                    "namespace": "global",
-                }
-            ],
+            "metafields": [{
+                "key": "description_tag",
+                "value": meta_description,
+                "type": "single_line_text_field",
+                "namespace": "global",
+            }],
         }
-    }
-
-    try:
-        resp = requests.post(
-            f"{base}/blogs/{blog_id}/articles.json",
-            headers=headers,
-            json=article_payload,
-            timeout=30,
-        )
-        if resp.status_code == 201:
-            article = resp.json().get("article", {})
-            article_id = article.get("id")
-            handle = article.get("handle", "")
-            blog_handle = ""
-            # Get blog handle for URL
-            try:
-                blog_resp = requests.get(f"{base}/blogs/{blog_id}.json", headers=headers, timeout=10)
-                if blog_resp.status_code == 200:
-                    blog_handle = blog_resp.json().get("blog", {}).get("handle", "news")
-            except Exception:
-                blog_handle = "news"
-
-            store_domain = os.environ.get("SHOPIFY_STORE_DOMAIN", "")
-            article_url = f"https://{store_domain}/blogs/{blog_handle}/{handle}"
-            return article_id, article_url
-        else:
-            raise Exception(f"Shopify API error {resp.status_code}: {resp.text[:200]}")
-    except Exception as e:
-        raise Exception(f"Failed to publish blog post: {e}")
+    })
+    article = result.get("article", {})
+    return article.get("id"), article.get("handle", "")
 
 # ─── Main entry point ─────────────────────────────────────────────────────────
 
 def generate_and_publish_blog(topic, dry_run=False):
     """
-    Full pipeline: fetch products → generate content → generate image → publish.
-    Returns dict with status, url, title, product_count, etc.
+    Full pipeline. Returns dict with status, url, title, steps, etc.
+    Possible statuses: 'needs_auth', 'dry_run', 'published', 'error'
     """
-    result = {
-        "topic": topic,
-        "dry_run": dry_run,
-        "status": "error",
-        "steps": [],
-    }
+    steps = []
+    def log(msg):
+        steps.append(msg)
+        print(f"[Blog] {msg}", flush=True)
 
-    if not shopify_configured():
-        result["error"] = "SHOPIFY_API_KEY or SHOPIFY_STORE_DOMAIN not set in Railway Variables."
-        return result
+    # Auth check
+    if not is_authorized():
+        return {
+            "status": "needs_auth",
+            "error": "Shopify not connected yet.",
+            "install_url": get_install_url(),
+            "steps": steps,
+        }
 
-    # Step 1: Fetch products
-    print(f"[Blog] Fetching products for topic: {topic}")
-    result["steps"].append("Fetching matching products from Shopify...")
-    products = fetch_products(topic, limit=8)
-    result["product_count"] = len(products)
-    result["products"] = [{"title": p["title"], "price": p["price"], "url": p["product_url"]} for p in products]
-    print(f"[Blog] Found {len(products)} products")
-    result["steps"].append(f"Found {len(products)} matching products.")
+    log(f"Topic: {topic}")
+    log(f"Mode: {'DRY RUN' if dry_run else 'LIVE PUBLISH'}")
 
-    # Step 2: Generate blog content
-    print(f"[Blog] Generating blog content...")
-    result["steps"].append("Generating blog post content with AI...")
-    content = generate_blog_content(topic, products)
-    result["title"] = content.get("title", topic)
-    result["meta_description"] = content.get("meta_description", "")
-    result["tags"] = content.get("tags", [])
-    result["steps"].append(f"Blog post written: \"{content['title']}\"")
-    print(f"[Blog] Content generated: {content['title']}")
-
-    if dry_run:
-        result["status"] = "dry_run"
-        result["steps"].append("DRY RUN — skipping image generation and publishing.")
-        result["body_html_preview"] = content.get("body_html", "")[:500] + "..."
-        return result
-
-    # Step 3: Generate hero image
-    print(f"[Blog] Generating hero image...")
-    result["steps"].append("Generating hero image with DALL-E 3...")
-    hero_b64 = generate_hero_image(topic)
-    hero_url = None
-    if hero_b64:
-        result["steps"].append("Hero image generated. Uploading to Shopify CDN...")
-        # Upload to Shopify
-        filename = f"blog-hero-{topic.lower().replace(' ', '-')[:40]}.png"
-        hero_url = upload_image_to_shopify(hero_b64, filename)
-        if hero_url:
-            result["hero_image_url"] = hero_url
-            result["steps"].append("Hero image uploaded to Shopify CDN.")
-        else:
-            result["steps"].append("Hero image upload failed — publishing without image.")
-    else:
-        result["steps"].append("Hero image generation failed — publishing without image.")
-
-    # Step 4: Get or create blog
-    print(f"[Blog] Getting Shopify blog...")
-    blog_id, blog_title = get_or_create_blog("News")
-    if not blog_id:
-        result["error"] = "Could not get or create a Shopify blog. Check API permissions."
-        return result
-    result["steps"].append(f"Publishing to Shopify blog: \"{blog_title}\"...")
-
-    # Step 5: Publish
-    print(f"[Blog] Publishing to Shopify...")
     try:
-        article_id, article_url = publish_blog_post(
-            blog_id=blog_id,
-            title=content["title"],
-            body_html=content["body_html"],
-            meta_description=content["meta_description"],
-            tags=content["tags"],
-            hero_image_url=hero_url,
-        )
-        result["status"] = "published"
-        result["article_id"] = article_id
-        result["article_url"] = article_url
-        result["steps"].append(f"✓ Published! View at: {article_url}")
-        print(f"[Blog] Published: {article_url}")
-    except Exception as e:
-        result["error"] = str(e)
-        result["steps"].append(f"✗ Publish failed: {e}")
+        # Step 1: Products
+        log("Fetching matching products from Shopify...")
+        products = fetch_products(topic, limit=10)
+        log(f"Found {len(products)} matching products")
+        for p in products[:5]:
+            log(f"  • {p['title']} (${p['price']})")
 
-    return result
+        # Step 2: Content
+        log("Writing blog post with GPT-4.1-mini...")
+        content = generate_blog_content(topic, products)
+        title    = content["title"]
+        meta     = content["meta_description"]
+        tags     = content.get("tags", [])
+        body     = content["body_html"]
+        log(f"Title: {title}")
+        log(f"Meta: {meta}")
+        log(f"Tags: {', '.join(tags)}")
+
+        if dry_run:
+            log("DRY RUN — skipping image generation and publishing")
+            return {
+                "status": "dry_run",
+                "title": title,
+                "meta_description": meta,
+                "tags": tags,
+                "body_html_preview": body[:600] + "...",
+                "products_featured": [p["title"] for p in products[:8]],
+                "steps": steps,
+            }
+
+        # Step 3: Hero image
+        log("Generating hero image with DALL-E 3...")
+        hero_b64 = generate_hero_image(topic)
+        hero_url = None
+        if hero_b64:
+            log("Uploading hero image to Shopify CDN...")
+            hero_url = upload_hero_image(hero_b64, topic)
+            if hero_url:
+                log("Hero image uploaded ✓")
+            else:
+                log("Hero image upload failed — publishing without image")
+        else:
+            log("Hero image generation failed — publishing without image")
+
+        # Step 4: Get blog
+        log("Getting Shopify blog...")
+        blog_id, blog_handle = get_or_create_blog("News")
+        if not blog_id:
+            return {"status": "error", "error": "Could not get or create Shopify blog.", "steps": steps}
+
+        # Step 5: Publish
+        log(f"Publishing to Shopify blog '{blog_handle}'...")
+        article_id, article_handle = publish_article(blog_id, title, body, meta, tags, hero_url)
+
+        domain = _cfg()["store_domain"].replace(".myshopify.com", ".com")
+        article_url = f"https://{domain}/blogs/{blog_handle}/{article_handle}"
+
+        log(f"✓ Published! Article ID: {article_id}")
+        log(f"URL: {article_url}")
+
+        return {
+            "status": "published",
+            "title": title,
+            "article_id": article_id,
+            "article_url": article_url,
+            "products_featured": [p["title"] for p in products[:8]],
+            "steps": steps,
+        }
+
+    except Exception as e:
+        log(f"ERROR: {e}")
+        return {"status": "error", "error": str(e), "steps": steps}

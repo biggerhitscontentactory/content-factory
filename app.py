@@ -39,6 +39,24 @@ sys.path.insert(0, BASE_DIR)
 sys.path.insert(0, MOD_DIR)
 
 os.makedirs(DATA_DIR, exist_ok=True)
+
+# ─── Shopify Blog module (lazy-safe import) ───────────────────────────────────
+try:
+    from shopify_blog import (
+        shopify_configured, is_authorized, get_install_url,
+        exchange_code_for_token, verify_shopify_hmac,
+        fetch_products, generate_and_publish_blog,
+    )
+    _shopify_blog_ok = True
+except ImportError as _e:
+    _shopify_blog_ok = False
+    def shopify_configured(): return False
+    def is_authorized(): return False
+    def get_install_url(): return "#"
+    def exchange_code_for_token(code): return ""
+    def verify_shopify_hmac(p): return False
+    def fetch_products(k, limit=10): return []
+    def generate_and_publish_blog(t, dry_run=False): return {"status": "error", "error": str(_e)}
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -850,6 +868,30 @@ def api_heygen_sheet_preview():
 
 
 
+
+# ─── Shopify OAuth ────────────────────────────────────────────────────────────
+@app.route("/shopify/install")
+@login_required
+def shopify_install():
+    """Redirect user to Shopify OAuth approval page."""
+    url = get_install_url()
+    return redirect(url)
+
+@app.route("/shopify/callback")
+def shopify_callback():
+    """Handle Shopify OAuth callback — exchange code for token."""
+    params = dict(request.args)
+    code = params.get("code", "")
+    if not code:
+        return "Missing OAuth code. Please try connecting again.", 400
+    try:
+        token = exchange_code_for_token(code)
+        if token:
+            return redirect("/?shopify=connected#blog")
+        return "OAuth failed — no token returned.", 400
+    except Exception as e:
+        return f"OAuth error: {e}", 500
+
 # ─── Shopify Blog Generator ──────────────────────────────────────────────────────
 @app.route("/api/blog/generate", methods=["POST"])
 @login_required
@@ -888,9 +930,12 @@ def api_blog_products():
 @app.route("/api/blog/status")
 @login_required
 def api_blog_status():
+    authorized = is_authorized()
     return jsonify({
         "shopify_configured": shopify_configured(),
+        "shopify_authorized": authorized,
         "shopify_domain": os.environ.get("SHOPIFY_STORE_DOMAIN", ""),
+        "install_url": get_install_url() if not authorized else None,
     })
 
 # ─── Health Check ────────────────────────────────────────────────────────────────────
