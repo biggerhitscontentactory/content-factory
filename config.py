@@ -20,6 +20,11 @@ SHOPIFY_API_VERSION = "2024-01"
 
 # ─── OneUp ────────────────────────────────────────────────────────────────────
 ONEUP_API_KEY = os.environ.get("ONEUP_API_KEY", "")
+ONEUP_TIKTOK_ID   = os.environ.get("ONEUP_TIKTOK_ID",   "")
+ONEUP_YOUTUBE_ID  = os.environ.get("ONEUP_YOUTUBE_ID",  "")
+
+# ─── Higgsfield AI (UGC product videos for USA Store) ─────────────────────────
+HIGGSFIELD_API_KEY = os.environ.get("HIGGSFIELD_API_KEY", "")
 
 # ─── HeyGen ───────────────────────────────────────────────────────────────────
 HEYGEN_API_KEY       = os.environ.get("HEYGEN_API_KEY", "")
@@ -29,6 +34,9 @@ HEYGEN_SHEET_ID      = os.environ.get("HEYGEN_SHEET_ID", "1xPAwaOish_Nw6Fix4xGEq
 HEYGEN_VIDEO_MIN_MIN = 7    # minimum video length in minutes
 HEYGEN_VIDEO_MAX_MIN = 13   # maximum video length in minutes
 HEYGEN_DAILY_LIMIT   = int(os.environ.get("HEYGEN_DAILY_LIMIT", 3))
+HEYGEN_USA_STORE_ENABLED = os.environ.get("HEYGEN_USA_STORE_ENABLED", "true").lower() == "true"
+HEYGEN_USA_STORE_AVATAR_ID = os.environ.get("HEYGEN_USA_STORE_AVATAR_ID", "01cd5898e6314ebbbc594840145dd829")
+HEYGEN_USA_STORE_VOICE_ID  = os.environ.get("HEYGEN_USA_STORE_VOICE_ID",  "cff38160a33643d7b8101d2ab989d5f1")
 
 # ─── Google Sheets (optional) ─────────────────────────────────────────────────
 GOOGLE_SHEETS_CREDENTIALS_FILE = "google_credentials.json"

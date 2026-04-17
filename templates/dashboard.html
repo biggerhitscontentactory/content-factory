@@ -358,6 +358,10 @@
           <tr><td><code>ONEUP_INSTAGRAM_ID</code></td><td>Run "Get Account IDs" below</td><td>Instagram posting</td></tr>
           <tr><td><code>ONEUP_FACEBOOK_ID</code></td><td>Run "Get Account IDs" below</td><td>Facebook posting</td></tr>
           <tr><td><code>ONEUP_LINKEDIN_ID</code></td><td>Run "Get Account IDs" below</td><td>LinkedIn posting</td></tr>
+          <tr><td><code>ONEUP_TIKTOK_ID</code></td><td>Run "Get Account IDs" below</td><td>TikTok posting (USA Store)</td></tr>
+          <tr><td><code>ONEUP_YOUTUBE_ID</code></td><td>Run "Get Account IDs" below</td><td>YouTube posting (USA Store)</td></tr>
+          <tr><td><code>HIGGSFIELD_API_KEY</code></td><td>cloud.higgsfield.ai → API Keys</td><td>UGC product videos (USA Store)</td></tr>
+          <tr><td><code>HEYGEN_USA_STORE_ENABLED</code></td><td>true or false</td><td>HeyGen videos for USA Store (default: true)</td></tr>
           <tr><td><code>DASHBOARD_PASSWORD</code></td><td>Choose your own</td><td>Dashboard login</td></tr>
         </tbody>
       </table>
@@ -584,7 +588,7 @@ async function loadStats() {
     const pc = d.daily_counts || {};
     const lim = d.daily_limits || {};
     let html = '';
-    const icons = {pinterest:'📌',instagram:'📸',facebook:'👍',tiktok:'🎵',linkedin:'💼',twitter:'🐦'};
+    const icons = {pinterest:'📌',instagram:'📸',facebook:'👍',tiktok:'🎵',youtube:'▶️',linkedin:'💼',twitter:'🐦'};
     for (const [p, cnt] of Object.entries(lim)) {
       const c = pc[p] || 0;
       const pct = Math.min(100, Math.round((c / cnt) * 100));

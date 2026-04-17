@@ -62,6 +62,7 @@ ACCOUNT_IDS = {
         "instagram": os.environ.get("ONEUP_INSTAGRAM_ID", ""),
         "facebook":  os.environ.get("ONEUP_FACEBOOK_ID",  ""),
         "tiktok":    os.environ.get("ONEUP_TIKTOK_ID",    ""),
+        "youtube":   os.environ.get("ONEUP_YOUTUBE_ID",   ""),
         "twitter":   os.environ.get("ONEUP_TWITTER_ID",   ""),
     },
     "ai_channel": {
@@ -148,6 +149,12 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
                 log_scheduled_posts(scheduled, title, "ecommerce")
                 print(f"[Runner] Scheduled {len(scheduled)} posts")
                 mark_product_posted(product.get("id", ""), len(scheduled))
+                # HeyGen short product video (USA Store)
+                try:
+                    from heygen_usa_store import generate_usa_store_video
+                    generate_usa_store_video(product, content_pack, dry_run=dry_run)
+                except Exception as hg_err:
+                    print(f"[Runner] HeyGen USA Store video skipped: {hg_err}")
 
             # Build preview item for dashboard
             pins = content_pack.get("pinterest_pins", [])

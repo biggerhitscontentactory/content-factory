@@ -380,6 +380,70 @@ def add_instagram_overlay(img, headline: str = "", price: str = ""):
     return img
 
 
+
+def add_tiktok_overlay(img, headline: str = "", price: str = ""):
+    """Add TikTok vertical video cover overlay (1080x1920)."""
+    img = img.copy()
+    w, h = img.size
+    draw = ImageDraw.Draw(img)
+    bold_font   = _load_font(bold=True,  size=88)
+    price_font  = _load_font(bold=True,  size=72)
+    small_font  = _load_font(bold=False, size=38)
+
+    # Dark gradient at bottom 40%
+    grad_h = int(h * 0.42)
+    grad_start = h - grad_h
+    for y in range(grad_h):
+        alpha = int(200 * (y / grad_h))
+        draw.rectangle([(0, grad_start + y), (w, grad_start + y + 1)],
+                       fill=(0, 0, 0, alpha))
+
+    # Price badge top-right
+    if price:
+        badge_text = f"${price}" if not str(price).startswith("$") else price
+        bbox = draw.textbbox((0, 0), badge_text, font=price_font)
+        bw = bbox[2] - bbox[0] + 32
+        bh = bbox[3] - bbox[1] + 18
+        bx = w - bw - 24
+        by = 36
+        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=14, fill=(220, 38, 38))
+        draw.text((bx + 16, by + 9), badge_text, font=price_font, fill=(255, 255, 255))
+
+    # Headline text bottom area
+    if headline:
+        max_w = w - 60
+        words = headline.upper().split()
+        lines, line = [], []
+        for word in words:
+            test = " ".join(line + [word])
+            if draw.textlength(test, font=bold_font) <= max_w:
+                line.append(word)
+            else:
+                if line:
+                    lines.append(" ".join(line))
+                line = [word]
+        if line:
+            lines.append(" ".join(line))
+        lines = lines[:3]
+        line_h = bold_font.size + 12
+        total_h = len(lines) * line_h
+        y_start = h - total_h - 80
+        for i, ln in enumerate(lines):
+            y = y_start + i * line_h
+            draw.text((30, y + 2), ln, font=bold_font, fill=(0, 0, 0, 120))
+            draw.text((30, y), ln, font=bold_font, fill=(255, 255, 255))
+
+    # TikTok-style "SHOP NOW" CTA bar at very bottom
+    cta_h = 64
+    draw.rectangle([(0, h - cta_h), (w, h)], fill=(220, 38, 38))
+    cta_font = _load_font(bold=True, size=44)
+    cta_text = "SHOP NOW  →"
+    cta_bbox = draw.textbbox((0, 0), cta_text, font=cta_font)
+    cta_x = (w - (cta_bbox[2] - cta_bbox[0])) // 2
+    draw.text((cta_x, h - cta_h + 10), cta_text, font=cta_font, fill=(255, 255, 255))
+
+    return img
+
 def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry_run: bool = False) -> dict:
     os.makedirs(out_dir, exist_ok=True)
     results = {}

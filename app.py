@@ -149,6 +149,7 @@ def api_stats():
             "instagram": int(os.environ.get("LIMIT_INSTAGRAM", 1)),
             "facebook":  int(os.environ.get("LIMIT_FACEBOOK", 2)),
             "tiktok":    int(os.environ.get("LIMIT_TIKTOK", 1)),
+            "youtube":   int(os.environ.get("LIMIT_YOUTUBE", 1)),
             "linkedin":  int(os.environ.get("LIMIT_LINKEDIN", 2)),
             "twitter":   int(os.environ.get("LIMIT_TWITTER", 4)),
         }
@@ -587,6 +588,10 @@ def api_config_status():
         "oneup_instagram": bool(os.environ.get("ONEUP_INSTAGRAM_ID")),
         "oneup_facebook": bool(os.environ.get("ONEUP_FACEBOOK_ID")),
         "oneup_linkedin": bool(os.environ.get("ONEUP_LINKEDIN_ID")),
+        "oneup_tiktok": bool(os.environ.get("ONEUP_TIKTOK_ID")),
+        "oneup_youtube": bool(os.environ.get("ONEUP_YOUTUBE_ID")),
+        "higgsfield": bool(os.environ.get("HIGGSFIELD_API_KEY")),
+        "heygen_usa_store": bool(os.environ.get("HEYGEN_API_KEY")) and os.environ.get("HEYGEN_USA_STORE_ENABLED", "true").lower() == "true",
         "pinterest_token": bool(os.environ.get("PINTEREST_ACCESS_TOKEN")),
     })
 
