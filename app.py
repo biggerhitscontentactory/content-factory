@@ -852,7 +852,7 @@ def api_heygen_sheet_preview():
 
 # ─── Shopify Blog Generator ──────────────────────────────────────────────────────
 @app.route("/api/blog/generate", methods=["POST"])
-@require_auth
+@login_required
 def api_blog_generate():
     data = request.json or {}
     topic = data.get("topic", "").strip()
@@ -876,7 +876,7 @@ def api_blog_generate():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route("/api/blog/products", methods=["GET"])
-@require_auth
+@login_required
 def api_blog_products():
     keyword = request.args.get("keyword", "patriotic")
     try:
@@ -886,7 +886,7 @@ def api_blog_products():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/blog/status")
-@require_auth
+@login_required
 def api_blog_status():
     return jsonify({
         "shopify_configured": shopify_configured(),
