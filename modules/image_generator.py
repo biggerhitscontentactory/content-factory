@@ -476,7 +476,7 @@ def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry
         img = smart_crop(img, *PLATFORM_SPECS["pinterest"]["size"])
 
         subtitle = pin.get("description", "")[:80] if pin else ""
-        img = add_pinterest_overlay(img, pin_title, subtitle=subtitle, price=price)
+        img = add_pinterest_overlay(img, pin_title, subtitle=subtitle, price="")
 
         path = os.path.join(out_dir, f"pinterest_{i+1}.jpg")
         img.save(path, "JPEG", quality=92)
@@ -512,7 +512,7 @@ def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry
         ig_headline = ig_data.get("headline", "") if isinstance(ig_data, dict) else ""
         if not ig_headline:
             ig_headline = title[:50]
-        ig_img = add_instagram_overlay(ig_img, headline=ig_headline, price=price)
+        ig_img = add_instagram_overlay(ig_img, headline=ig_headline, price="")
         ig_path = os.path.join(out_dir, "instagram.jpg")
         ig_img.save(ig_path, "JPEG", quality=92)
         results["instagram"] = [ig_path]
