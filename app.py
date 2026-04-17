@@ -849,6 +849,50 @@ def api_heygen_sheet_preview():
     return jsonify({"rows": rows, "total": len(rows)})
 
 
+
+# ─── Shopify Blog Generator ──────────────────────────────────────────────────────
+@app.route("/api/blog/generate", methods=["POST"])
+@require_auth
+def api_blog_generate():
+    data = request.json or {}
+    topic = data.get("topic", "").strip()
+    dry_run = data.get("dry_run", False)
+    if not topic:
+        return jsonify({"error": "Topic is required"}), 400
+    if not shopify_configured():
+        return jsonify({"error": "SHOPIFY_API_KEY or SHOPIFY_STORE_DOMAIN not set in Railway Variables."}), 400
+
+    def stream():
+        import sys
+        import io
+        # Capture stdout for streaming
+        result = generate_and_publish_blog(topic, dry_run=dry_run)
+        yield json.dumps(result)
+
+    try:
+        result = generate_and_publish_blog(topic, dry_run=dry_run)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+@app.route("/api/blog/products", methods=["GET"])
+@require_auth
+def api_blog_products():
+    keyword = request.args.get("keyword", "patriotic")
+    try:
+        products = fetch_products(keyword, limit=12)
+        return jsonify({"products": products})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/blog/status")
+@require_auth
+def api_blog_status():
+    return jsonify({
+        "shopify_configured": shopify_configured(),
+        "shopify_domain": os.environ.get("SHOPIFY_STORE_DOMAIN", ""),
+    })
+
 # ─── Health Check ────────────────────────────────────────────────────────────────────
 @app.route("/health")
 def health():
