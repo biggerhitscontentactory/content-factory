@@ -117,32 +117,109 @@ Generate a complete content pack. Return ONLY valid JSON with this exact structu
   "voice_style": "{voice_style}",
   "pinterest_pins": [
     {{
-      "title": "Pin title (max 100 chars, keyword-rich for Pinterest SEO)",
-      "description": "Pin description (150-250 chars, conversational, ends with product URL)",
+      "titles": [
+        "Pin 1 title option 1 (max 100 chars, keyword-rich for Pinterest SEO)",
+        "Pin 1 title option 2 — different angle",
+        "Pin 1 title option 3 — benefit-focused",
+        "Pin 1 title option 4 — curiosity/question style",
+        "Pin 1 title option 5 — seasonal/occasion angle"
+      ],
+      "descriptions": [
+        "Pin 1 description option 1 (150-250 chars, conversational)",
+        "Pin 1 description option 2 — different emotional angle",
+        "Pin 1 description option 3 — gift-giving angle",
+        "Pin 1 description option 4 — lifestyle/identity angle"
+      ],
       "hashtags": "#patriotic #america250 #usagifts #july4th #americanpride #giftideas #usastore",
+      "link": "Use the product URL from PRODUCT DETAILS above",
       "image_prompt": "Detailed DALL-E prompt for a vertical 2:3 lifestyle image showing this product in a patriotic American setting"
     }},
     {{
-      "title": "Different angle pin title",
-      "description": "Different angle description ending with product URL",
+      "titles": [
+        "Pin 2 title option 1 — gift angle",
+        "Pin 2 title option 2 — pride angle",
+        "Pin 2 title option 3 — occasion angle",
+        "Pin 2 title option 4 — value angle",
+        "Pin 2 title option 5 — collector angle"
+      ],
+      "descriptions": [
+        "Pin 2 description option 1",
+        "Pin 2 description option 2",
+        "Pin 2 description option 3",
+        "Pin 2 description option 4"
+      ],
       "hashtags": "#patrioticgifts #america #july4th #1776 #usapride #giftsforher #giftsforhim",
-      "image_prompt": "Different scene DALL-E prompt"
+      "link": "Use the product URL from PRODUCT DETAILS above",
+      "image_prompt": "Different scene DALL-E prompt — outdoor patriotic setting"
     }},
     {{
-      "title": "Gift-focused pin title",
-      "description": "Gift-focused description ending with product URL",
+      "titles": [
+        "Pin 3 title option 1 — America 250 angle",
+        "Pin 3 title option 2 — heritage angle",
+        "Pin 3 title option 3 — celebration angle",
+        "Pin 3 title option 4 — shop/deal angle",
+        "Pin 3 title option 5 — community/pride angle"
+      ],
+      "descriptions": [
+        "Pin 3 description option 1",
+        "Pin 3 description option 2",
+        "Pin 3 description option 3",
+        "Pin 3 description option 4"
+      ],
       "hashtags": "#giftideas #patrioticgifts #americangifts #4thofjuly #america250 #usagifts #shopusa",
+      "link": "Use the product URL from PRODUCT DETAILS above",
       "image_prompt": "Gift presentation DALL-E prompt"
     }}
   ],
   "instagram_post": {{
-    "caption": "Instagram caption (150-220 chars, conversational, max 2 emojis, ends with CTA)",
-    "hashtags": "15-20 relevant hashtags: mix of niche (#america250 #patrioticgifts), broad (#giftideas #shopsmall), and seasonal (#july4th #4thofjuly #independence day). Format: #tag1 #tag2 ...",
+    "titles": [
+      "IG caption option 1 (150-220 chars, conversational, max 2 emojis, ends with CTA)",
+      "IG caption option 2 — different emotional hook",
+      "IG caption option 3 — question/engagement style",
+      "IG caption option 4 — story/narrative style",
+      "IG caption option 5 — urgency/occasion style"
+    ],
+    "caption": "IG caption option 1 (same as titles[0] — primary pick)",
+    "hashtags": "#america250 #patrioticgifts #usastore #giftideas #shopsmall #july4th #4thofjuly #independenceday #americanpride #usapride #patriotic #shopusa #americanmade #giftsforhim #giftsforher #patrioticfashion #usagifts #1776 #america #freedom",
+    "link": "Use the product URL from PRODUCT DETAILS above",
     "image_prompt": "DALL-E prompt for a square lifestyle product image, bright and eye-catching"
   }},
   "facebook_post": {{
-    "text": "Facebook post (100-180 chars, conversational, includes product link, discussion CTA at end)",
+    "titles": [
+      "Facebook post option 1 (100-180 chars, conversational, discussion CTA at end)",
+      "Facebook post option 2 — different angle",
+      "Facebook post option 3 — question to audience",
+      "Facebook post option 4 — story angle",
+      "Facebook post option 5 — value/deal angle"
+    ],
+    "text": "Facebook post option 1 (same as titles[0] — primary pick)",
+    "link": "Use the product URL from PRODUCT DETAILS above",
     "image_prompt": "DALL-E prompt for a Facebook-optimized product lifestyle image"
+  }},
+  "tiktok_post": {{
+    "titles": [
+      "TikTok caption option 1 (short, punchy, 1-2 lines max)",
+      "TikTok caption option 2 — trending hook style",
+      "TikTok caption option 3 — question/challenge style",
+      "TikTok caption option 4 — POV style",
+      "TikTok caption option 5 — reaction/surprise style"
+    ],
+    "script": "TikTok caption option 1 (same as titles[0])",
+    "hook": "First 3 seconds hook line (punchy, stops the scroll)",
+    "hashtags": "#america250 #patriotic #usastore #july4th #fyp #foryou #patrioticvibes #usapride #giftideas #shopusa",
+    "link": "Use the product URL from PRODUCT DETAILS above"
+  }},
+  "youtube_post": {{
+    "titles": [
+      "YouTube title option 1 (max 70 chars, SEO-optimized)",
+      "YouTube title option 2 — curiosity angle",
+      "YouTube title option 3 — benefit angle",
+      "YouTube title option 4 — occasion angle",
+      "YouTube title option 5 — review/showcase angle"
+    ],
+    "description": "YouTube description (150-250 chars, includes product link, subscribe CTA)",
+    "link": "Use the product URL from PRODUCT DETAILS above",
+    "image_prompt": "YouTube thumbnail prompt — high contrast, bold text overlay, eye-catching"
   }},
   "video_script": {{
     "hook": "First 3 seconds hook line (punchy, stops the scroll)",
@@ -161,7 +238,7 @@ Generate a complete content pack. Return ONLY valid JSON with this exact structu
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.8,
-            max_tokens=2000,
+            max_tokens=3500,
         )
         raw = response.choices[0].message.content.strip()
         # Strip markdown code blocks if present

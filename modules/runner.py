@@ -212,19 +212,94 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
             }
             preview_items.append(preview_item)
 
-            # Human-readable output for logs
-            print(f"\n[Runner] {'DRY RUN' if dry_run else 'LIVE'} PREVIEW:")
-            print(f"  Pinterest Pins: {len(pins)}")
-            for j, pin in enumerate(pins[:2], 1):
-                print(f"    Pin {j}: {pin.get('title', '')[:70]}")
-            if ig_caption:
-                print(f"  Instagram: {ig_caption[:120]}...")
-            if fb_text:
-                print(f"  Facebook: {fb_text[:120]}...")
-            print(f"  Images generated: {total_imgs}")
-            for plat, paths in web_images.items():
-                for p in paths:
-                    print(f"    [{plat}] {p}")
+            # ── Full per-image content breakdown ──────────────────────────
+            sep = "─" * 65
+            print(f"\n{sep}")
+            print(f"CONTENT PREVIEW — {title[:60]}")
+            print(f"{sep}")
+
+            # ── Pinterest Pins ──────────────────────────────────────────
+            for j, pin in enumerate(pins, 1):
+                img_path = images.get(f"pinterest_{j}", "")
+                print(f"\n📌 PINTEREST PIN {j}")
+                if img_path:
+                    print(f"   Image : {img_path}")
+                print(f"   Link  : {pin.get('link', product.get('url', ''))}")
+                print(f"   Hashtags: {pin.get('hashtags', '')}")
+                titles = pin.get('titles', [pin.get('title', '')])
+                descs  = pin.get('descriptions', [pin.get('description', '')])
+                print(f"   — 5 Title Options —")
+                for k, t in enumerate(titles, 1):
+                    print(f"     {k}. {t}")
+                print(f"   — 4 Description Options —")
+                for k, d in enumerate(descs, 1):
+                    print(f"     {k}. {d}")
+
+            # ── Instagram ───────────────────────────────────────────────
+            ig = content_pack.get("instagram_post", {})
+            if ig:
+                img_path = images.get("instagram", "")
+                print(f"\n📸 INSTAGRAM")
+                if img_path:
+                    print(f"   Image : {img_path}")
+                print(f"   Link  : {ig.get('link', product.get('url', ''))}")
+                print(f"   Hashtags: {ig.get('hashtags', '')}")
+                ig_titles = ig.get('titles', [ig.get('caption', '')])
+                print(f"   — 5 Caption Options —")
+                for k, t in enumerate(ig_titles, 1):
+                    print(f"     {k}. {t}")
+
+            # ── Facebook ────────────────────────────────────────────────
+            fb = content_pack.get("facebook_post", {})
+            if fb:
+                img_path = images.get("facebook", "")
+                print(f"\n👍 FACEBOOK")
+                if img_path:
+                    print(f"   Image : {img_path}")
+                print(f"   Link  : {fb.get('link', product.get('url', ''))}")
+                fb_titles = fb.get('titles', [fb.get('text', '')])
+                print(f"   — 5 Post Options —")
+                for k, t in enumerate(fb_titles, 1):
+                    print(f"     {k}. {t}")
+
+            # ── TikTok ──────────────────────────────────────────────────
+            tt = content_pack.get("tiktok_post", {})
+            if tt:
+                img_path = images.get("tiktok", "")
+                print(f"\n🎵 TIKTOK")
+                if img_path:
+                    print(f"   Image : {img_path}")
+                print(f"   Link  : {tt.get('link', product.get('url', ''))}")
+                print(f"   Hashtags: {tt.get('hashtags', '')}")
+                tt_titles = tt.get('titles', [tt.get('script', tt.get('hook', ''))])
+                print(f"   — 5 Caption Options —")
+                for k, t in enumerate(tt_titles, 1):
+                    print(f"     {k}. {t}")
+
+            # ── YouTube ─────────────────────────────────────────────────
+            yt = content_pack.get("youtube_post", {})
+            if yt:
+                img_path = images.get("youtube", "")
+                print(f"\n▶️  YOUTUBE")
+                if img_path:
+                    print(f"   Image : {img_path}")
+                print(f"   Link  : {yt.get('link', product.get('url', ''))}")
+                yt_titles = yt.get('titles', [yt.get('description', '')])
+                print(f"   — 5 Title Options —")
+                for k, t in enumerate(yt_titles, 1):
+                    print(f"     {k}. {t}")
+                print(f"   Description: {yt.get('description', '')}")
+
+            # ── Video Script ────────────────────────────────────────────
+            vs = content_pack.get("video_script", {})
+            if vs:
+                print(f"\n🎬 VIDEO SCRIPT")
+                print(f"   Hook : {vs.get('hook', '')}")
+                print(f"   Body : {vs.get('body', '')}")
+                print(f"   CTA  : {vs.get('cta', '')}")
+
+            print(f"\n   Total images generated: {total_imgs}")
+            print(f"{sep}")
 
             # Save content pack
             with open(os.path.join(out_dir, "content_pack.json"), "w") as f:
