@@ -4,16 +4,10 @@ Content Factory - Image Generator
 Generates platform-ready images using DALL-E 3 (lifestyle scenes matching
 OfficialUSAStore.com Pinterest style), then adds text overlays via PIL.
 
-Pinterest style:
-  - Patriotic lifestyle scenes (backyard parties, product flatlays, family gatherings)
-  - Bold headline text at top (dark navy on white bar) OR overlaid on image
-  - OfficialUSAStore.com watermark bottom-right
-  - Red/white/blue color palette, gold stars, mini flags as props
-
 Platform specs:
-  Pinterest  : 1000 x 1500 px (2:3 vertical)  — 3 pins per product, DALL-E
-  Instagram  : 1080 x 1080 px (1:1 square)    — 1 image, DALL-E, minimal text
-  Facebook   : 1200 x 630  px (landscape)     — cropped from Instagram image
+  Pinterest  : 1000 x 1500 px (2:3 vertical)  -- 3 pins per product, DALL-E
+  Instagram  : 1080 x 1080 px (1:1 square)    -- 1 image, DALL-E, minimal text
+  Facebook   : 1200 x 630  px (landscape)     -- cropped from Instagram image
 """
 
 import os
@@ -24,21 +18,21 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
 
-# ─── Brand Colors ─────────────────────────────────────────────────────────────
+# Brand Colors
 COLOR_NAVY   = (15,  30,  70)
 COLOR_RED    = (178, 34,  52)
 COLOR_WHITE  = (255, 255, 255)
 COLOR_GOLD   = (212, 175, 55)
 COLOR_CREAM  = (255, 253, 240)
 
-# ─── Platform Specs ───────────────────────────────────────────────────────────
+# Platform Specs
 PLATFORM_SPECS = {
     "pinterest": {"size": (1000, 1500), "dalle_size": "1024x1792"},
     "instagram": {"size": (1080, 1080), "dalle_size": "1024x1024"},
     "facebook":  {"size": (1200, 630)},
 }
 
-# ─── Pinterest Content Angles (rotated per pin) ───────────────────────────────
+# Pinterest Content Angles
 PIN_ANGLES = [
     "patriotic backyard party scene with American flags, gold stars, red white blue confetti on white wood table",
     "happy American family outdoors celebrating with patriotic decorations, warm golden sunset light",
@@ -47,52 +41,73 @@ PIN_ANGLES = [
     "close-up lifestyle shot with patriotic props: confetti, small flags, gold coins, celebration atmosphere",
 ]
 
+# Bundled Font Paths (relative to this file, committed to repo)
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_FONTS_DIR = os.path.join(os.path.dirname(_THIS_DIR), "static", "fonts")
+_FONT_BOLD    = os.path.join(_FONTS_DIR, "LiberationSans-Bold.ttf")
+_FONT_REGULAR = os.path.join(_FONTS_DIR, "LiberationSans-Regular.ttf")
+
+# System font fallbacks
+_SYSTEM_BOLD = [
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    "/usr/share/fonts/truetype/ubuntu/Ubuntu-Bold.ttf",
+]
+_SYSTEM_REGULAR = [
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+]
+
 
 def get_openai_client():
-    """Get OpenAI client using environment variables."""
     from openai import OpenAI
     api_key = os.environ.get("OPENAI_API_KEY", "")
     base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
     return OpenAI(api_key=api_key, base_url=base_url)
 
 
-def get_font(size: int):
-    """Try to load a system bold font, fall back to default."""
-    font_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-        "/usr/share/fonts/truetype/ubuntu/Ubuntu-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ]
-    for path in font_paths:
+def _load_font(size: int, bold: bool = True):
+    """
+    Load a font at the given pixel size.
+    Priority: bundled repo font -> system font -> PIL default (last resort).
+    Logs which path was used so Railway logs show what is happening.
+    """
+    primary = _FONT_BOLD if bold else _FONT_REGULAR
+    fallbacks = _SYSTEM_BOLD if bold else _SYSTEM_REGULAR
+
+    if os.path.exists(primary):
+        try:
+            font = ImageFont.truetype(primary, size)
+            print(f"[Font] Loaded bundled {'bold' if bold else 'regular'} at {size}px from {primary}")
+            return font
+        except Exception as e:
+            print(f"[Font] Bundled font failed: {e}")
+
+    for path in fallbacks:
         if os.path.exists(path):
             try:
-                return ImageFont.truetype(path, size)
+                font = ImageFont.truetype(path, size)
+                print(f"[Font] Loaded system font {path} at {size}px")
+                return font
             except Exception:
                 continue
+
+    print(f"[Font] WARNING: falling back to PIL default font -- text will be tiny!")
     return ImageFont.load_default()
+
+
+def get_font(size: int):
+    return _load_font(size, bold=True)
 
 
 def get_font_regular(size: int):
-    """Try to load a regular (non-bold) system font."""
-    font_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-        "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
-    ]
-    for path in font_paths:
-        if os.path.exists(path):
-            try:
-                return ImageFont.truetype(path, size)
-            except Exception:
-                continue
-    return ImageFont.load_default()
+    return _load_font(size, bold=False)
 
 
 def wrap_text(text: str, font, max_width: int, draw) -> list:
-    """Wrap text to fit within max_width pixels."""
     words = text.split()
     lines = []
     current = []
@@ -110,7 +125,6 @@ def wrap_text(text: str, font, max_width: int, draw) -> list:
 
 
 def smart_crop(img, target_w: int, target_h: int):
-    """Resize to fill target dimensions, then center-crop."""
     src_w, src_h = img.size
     target_ratio = target_w / target_h
     src_ratio = src_w / src_h
@@ -127,7 +141,6 @@ def smart_crop(img, target_w: int, target_h: int):
 
 
 def download_image(url: str):
-    """Download image from URL and return as PIL Image."""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         resp = requests.get(url, headers=headers, timeout=20)
@@ -138,8 +151,7 @@ def download_image(url: str):
         return None
 
 
-def generate_dalle_image(prompt: str, size: str = "1024x1792") -> Image.Image | None:
-    """Generate an image using DALL-E 3 and return as PIL Image."""
+def generate_dalle_image(prompt: str, size: str = "1024x1792"):
     try:
         client = get_openai_client()
         print(f"[ImageGen] DALL-E 3 generating ({size})...")
@@ -159,12 +171,8 @@ def generate_dalle_image(prompt: str, size: str = "1024x1792") -> Image.Image | 
 
 
 def build_pinterest_prompt(product: dict, pin_title: str, angle_idx: int) -> str:
-    """Build a DALL-E prompt matching OfficialUSAStore Pinterest style."""
     title = product.get("title", "patriotic product")
-    price = product.get("price", "")
     angle = PIN_ANGLES[angle_idx % len(PIN_ANGLES)]
-
-    # Leave white space at top for text overlay (about 20% of image height)
     prompt = (
         f"Vertical Pinterest pin image (2:3 ratio) for an American patriotic gift store. "
         f"Scene: {angle}. "
@@ -181,10 +189,8 @@ def build_pinterest_prompt(product: dict, pin_title: str, angle_idx: int) -> str
 
 
 def build_instagram_prompt(product: dict, image_prompt: str = "") -> str:
-    """Build a DALL-E prompt for Instagram square lifestyle image."""
     title = product.get("title", "patriotic product")
     base = image_prompt or f"patriotic lifestyle scene featuring {title}"
-
     prompt = (
         f"Square Instagram post image for an American patriotic gift store. "
         f"Scene: {base}. "
@@ -200,181 +206,181 @@ def build_instagram_prompt(product: dict, image_prompt: str = "") -> str:
     return prompt
 
 
-def add_pinterest_overlay(img: Image.Image, headline: str, subtitle: str = "", price: str = "") -> Image.Image:
+def add_pinterest_overlay(img, headline: str, subtitle: str = "", price: str = ""):
     """
-    Add Pinterest-style overlay matching OfficialUSAStore style:
-    - White bar at top with LARGE bold navy headline text
-    - Subtitle in readable regular text below headline
-    - OfficialUSAStore.com watermark bottom-right
+    Add Pinterest-style overlay.
+    HARDCODED large pixel sizes (not fractions) -- always readable.
+    Fonts loaded from bundled repo files so Railway always works.
+
+    At 1000px width:
+      Headline  = 96px bold
+      Subtitle  = 52px regular
+      Price     = 64px bold
+      Watermark = 36px bold
     """
     w, h = img.size
     draw = ImageDraw.Draw(img)
 
-    pad = int(w * 0.04)
+    scale = w / 1000.0
+
+    HEADLINE_PX  = max(int(96  * scale), 80)
+    SUBTITLE_PX  = max(int(52  * scale), 44)
+    PRICE_PX     = max(int(64  * scale), 56)
+    WATERMARK_PX = max(int(36  * scale), 30)
+
+    pad    = max(int(32 * scale), 24)
     text_w = w - pad * 2
 
-    # ── Font sizes: large and bold for readability ───────────────────────────
-    # On a 1000px wide pin: headline=110px, subtitle=68px, price=72px, watermark=44px
-    headline_size = int(w * 0.11)   # 110px — bold and readable, fits 3-4 words per line
-    subtitle_size = int(w * 0.068)  # 68px  — clearly readable
-    price_size    = int(w * 0.072)  # 72px  — bold badge
-    wm_size       = int(w * 0.044)  # 44px  — visible watermark
+    headline_font = get_font(HEADLINE_PX)
+    subtitle_font = get_font_regular(SUBTITLE_PX)
 
-    headline_font = get_font(headline_size)
-    subtitle_font = get_font_regular(subtitle_size)
-
-    # ── Measure text to size the bar dynamically ─────────────────────────────
     headline_upper = headline.upper()
     h_lines = wrap_text(headline_upper, headline_font, text_w, draw)
 
-    h_line_h = int(headline_size * 1.2)   # line height with spacing
-    s_line_h = int(subtitle_size * 1.25)
+    h_line_h = int(HEADLINE_PX * 1.25)
+    s_line_h = int(SUBTITLE_PX * 1.30)
+
     total_text_h = len(h_lines) * h_line_h
 
-    # Pre-measure subtitle lines so bar height accounts for them
-    s_lines_preview = []
+    s_lines = []
     if subtitle:
-        s_lines_preview = wrap_text(subtitle, subtitle_font, text_w, draw)[:2]
-        total_text_h += len(s_lines_preview) * s_line_h + int(h * 0.01)
+        s_lines = wrap_text(subtitle, subtitle_font, text_w, draw)[:2]
+        total_text_h += int(SUBTITLE_PX * 0.6) + len(s_lines) * s_line_h
 
-    # Bar height: must contain ALL text — no cap, expands as needed
-    bar_h = total_text_h + int(h * 0.04)   # top+bottom padding
-    bar_h = max(bar_h, int(h * 0.14))       # minimum 14%
+    bar_padding = max(int(40 * scale), 32)
+    bar_h = total_text_h + bar_padding * 2
+    bar_h = max(bar_h, int(h * 0.18))
 
-    # Draw white bar
     draw.rectangle([(0, 0), (w, bar_h)], fill=COLOR_WHITE)
-    # Add a thin red accent line at bottom of bar
-    draw.rectangle([(0, bar_h - 6), (w, bar_h)], fill=COLOR_RED)
+    accent_h = max(int(8 * scale), 6)
+    draw.rectangle([(0, bar_h - accent_h), (w, bar_h)], fill=COLOR_RED)
 
-    # ── Draw headline centered in bar ────────────────────────────────────────
     y = (bar_h - total_text_h) // 2
-    if y < 12:
-        y = 12
+    if y < bar_padding // 2:
+        y = bar_padding // 2
 
     for line in h_lines:
         bbox = draw.textbbox((0, 0), line, font=headline_font)
         lw = bbox[2] - bbox[0]
         x = (w - lw) // 2
-        # Shadow for depth
-        draw.text((x + 2, y + 2), line, font=headline_font, fill=(180, 180, 200))
+        draw.text((x + 3, y + 3), line, font=headline_font, fill=(200, 200, 215))
         draw.text((x, y), line, font=headline_font, fill=COLOR_NAVY)
         y += h_line_h
-    # ── Draw subtitle ────────────────────────────────────────────────────────
-    if subtitle:
-        s_lines = s_lines_preview if s_lines_preview else wrap_text(subtitle, subtitle_font, text_w, draw)[:2]
+
+    if s_lines:
+        y += int(SUBTITLE_PX * 0.4)
         for sline in s_lines:
             bbox = draw.textbbox((0, 0), sline, font=subtitle_font)
             lw = bbox[2] - bbox[0]
             x = (w - lw) // 2
-            draw.text((x, y), sline, font=subtitle_font, fill=(60, 60, 90))
+            draw.text((x, y), sline, font=subtitle_font, fill=(50, 50, 80))
             y += s_line_h
 
-    # ── Price badge (bottom-left, large and bold) ────────────────────────────
     if price:
-        price_font = get_font(price_size)
+        price_font = get_font(PRICE_PX)
         try:
             pt = f"${float(price):.2f}"
         except Exception:
             pt = f"${price}"
         pb = draw.textbbox((0, 0), pt, font=price_font)
-        pw = pb[2] - pb[0] + 40
-        ph = pb[3] - pb[1] + 24
+        pw = pb[2] - pb[0] + int(48 * scale)
+        ph = pb[3] - pb[1] + int(28 * scale)
         bx = pad
-        by = h - int(h * 0.07) - ph
-        # Shadow
-        draw.rounded_rectangle([(bx + 3, by + 3), (bx + pw + 3, by + ph + 3)],
-                                radius=12, fill=(100, 0, 0))
-        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=12, fill=COLOR_RED)
+        by = h - int(80 * scale) - ph
+        draw.rounded_rectangle([(bx + 4, by + 4), (bx + pw + 4, by + ph + 4)],
+                                radius=14, fill=(100, 0, 0))
+        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=14, fill=COLOR_RED)
         draw.text((bx + pw // 2, by + ph // 2), pt, font=price_font,
                   fill=COLOR_WHITE, anchor="mm")
 
-    # ── Watermark bottom-right, large enough to read ─────────────────────────
-    wm_font = get_font(wm_size)
+    wm_font = get_font(WATERMARK_PX)
     wm_text = "OfficialUSAStore.com"
     wb = draw.textbbox((0, 0), wm_text, font=wm_font)
     wm_w = wb[2] - wb[0]
     wm_h = wb[3] - wb[1]
     wm_x = w - pad - wm_w
     wm_y = h - pad - wm_h
-    # Dark semi-transparent pill background
-    bg_pad = 10
+    bg_pad = int(12 * scale)
     draw.rounded_rectangle(
         [(wm_x - bg_pad, wm_y - bg_pad // 2),
          (wm_x + wm_w + bg_pad, wm_y + wm_h + bg_pad // 2)],
-        radius=8, fill=(0, 0, 0, 160)
+        radius=8, fill=(0, 0, 0, 180)
     )
     draw.text((wm_x, wm_y), wm_text, font=wm_font, fill=COLOR_WHITE)
 
     return img
 
 
-def add_instagram_overlay(img: Image.Image, headline: str = "", price: str = "") -> Image.Image:
+def add_instagram_overlay(img, headline: str = "", price: str = ""):
     """
-    Add Instagram overlay:
-    - White bar at top with bold headline (same style as Pinterest)
-    - Bottom navy bar with OfficialUSAStore.com
-    - Optional price badge top-right
+    Add Instagram overlay with large readable text.
+    HARDCODED pixel sizes at 1080px width:
+      Headline = 88px bold
+      URL bar  = 40px bold
+      Price    = 68px bold
     """
     w, h = img.size
     draw = ImageDraw.Draw(img)
-    pad = int(w * 0.04)
+
+    scale = w / 1080.0
+
+    HEADLINE_PX  = max(int(88  * scale), 72)
+    URL_PX       = max(int(40  * scale), 32)
+    PRICE_PX     = max(int(68  * scale), 56)
+
+    pad    = max(int(36 * scale), 28)
     text_w = w - pad * 2
 
-    # ── Top headline bar (if headline provided) ──────────────────────────────
     top_bar_h = 0
     if headline:
-        headline_size = int(w * 0.085)  # 92px on 1080px — fits 4-5 words per line
-        headline_font = get_font(headline_size)
+        headline_font = get_font(HEADLINE_PX)
         h_lines = wrap_text(headline.upper(), headline_font, text_w, draw)
-        h_line_h = int(headline_size * 1.2)
-        top_bar_h = len(h_lines) * h_line_h + int(h * 0.04)
-        top_bar_h = max(top_bar_h, int(h * 0.12))
+        h_line_h = int(HEADLINE_PX * 1.25)
+
+        bar_padding = max(int(40 * scale), 32)
+        top_bar_h = len(h_lines) * h_line_h + bar_padding * 2
+        top_bar_h = max(top_bar_h, int(h * 0.16))
 
         draw.rectangle([(0, 0), (w, top_bar_h)], fill=COLOR_WHITE)
-        draw.rectangle([(0, top_bar_h - 5), (w, top_bar_h)], fill=COLOR_RED)
+        accent_h = max(int(7 * scale), 5)
+        draw.rectangle([(0, top_bar_h - accent_h), (w, top_bar_h)], fill=COLOR_RED)
 
         y = (top_bar_h - len(h_lines) * h_line_h) // 2
-        if y < 8:
-            y = 8
+        if y < bar_padding // 2:
+            y = bar_padding // 2
         for line in h_lines:
             bbox = draw.textbbox((0, 0), line, font=headline_font)
             lw = bbox[2] - bbox[0]
             x = (w - lw) // 2
-            draw.text((x + 2, y + 2), line, font=headline_font, fill=(180, 180, 200))
+            draw.text((x + 3, y + 3), line, font=headline_font, fill=(200, 200, 215))
             draw.text((x, y), line, font=headline_font, fill=COLOR_NAVY)
             y += h_line_h
 
-    # ── Bottom navy bar ───────────────────────────────────────────────────────
-    bottom_bar_h = int(h * 0.07)
+    bottom_bar_h = max(int(72 * scale), 60)
     draw.rectangle([(0, h - bottom_bar_h), (w, h)], fill=COLOR_NAVY)
-    url_font = get_font(int(w * 0.036))
+    url_font = get_font(URL_PX)
     draw.text((w // 2, h - bottom_bar_h // 2), "OfficialUSAStore.com",
               font=url_font, fill=COLOR_GOLD, anchor="mm")
 
-    # ── Price badge — just below the top bar, top-right ─────────────────────────
     if price:
-        price_font = get_font(int(w * 0.065))
+        price_font = get_font(PRICE_PX)
         try:
             pt = f"${float(price):.2f}"
         except Exception:
             pt = f"${price}"
         pb = draw.textbbox((0, 0), pt, font=price_font)
-        pw = pb[2] - pb[0] + 28
-        ph = pb[3] - pb[1] + 18
+        pw = pb[2] - pb[0] + int(40 * scale)
+        ph = pb[3] - pb[1] + int(24 * scale)
         bx = w - pad - pw
-        by = top_bar_h + pad  # below the headline bar
-        draw.rounded_rectangle([(bx + 3, by + 3), (bx + pw + 3, by + ph + 3)], radius=10, fill=(100, 0, 0))
-        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=10, fill=COLOR_RED)
+        by = top_bar_h + pad
+        draw.rounded_rectangle([(bx + 4, by + 4), (bx + pw + 4, by + ph + 4)], radius=12, fill=(100, 0, 0))
+        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=12, fill=COLOR_RED)
         draw.text((bx + pw // 2, by + ph // 2), pt, font=price_font, fill=COLOR_WHITE, anchor="mm")
 
     return img
 
 
 def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry_run: bool = False) -> dict:
-    """
-    Main entry point: generate all platform images for a product using DALL-E 3.
-    Returns dict of {platform: [image_path, ...]}
-    """
     os.makedirs(out_dir, exist_ok=True)
     results = {}
 
@@ -382,21 +388,18 @@ def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry
     price = str(product.get("price", ""))
     pins  = content_pack.get("pinterest_pins", [])
 
-    # ── Pinterest Pins (DALL-E 3, vertical) ──────────────────────────────────
     pin_images = []
     num_pins = min(3, len(pins)) if pins else 3
 
     for i in range(num_pins):
         pin = pins[i] if i < len(pins) else {}
         pin_title = pin.get("title", f"Shop {title}")
-        # Use the image_prompt from content engine if available, else build one
         dalle_prompt = pin.get("image_prompt") or build_pinterest_prompt(product, pin_title, i)
 
         print(f"[ImageGen] Generating Pinterest pin {i+1}/{num_pins}...")
         img = generate_dalle_image(dalle_prompt, size="1024x1792")
 
         if img is None:
-            # Fallback: use product image from Shopify
             print(f"[ImageGen] DALL-E failed for pin {i+1}, trying product image fallback...")
             images = product.get("images", [])
             if images:
@@ -406,25 +409,21 @@ def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry
                 print(f"[ImageGen] No fallback image available for pin {i+1}")
                 continue
 
-        # Resize to Pinterest spec
         img = smart_crop(img, *PLATFORM_SPECS["pinterest"]["size"])
 
-        # Add overlay
         subtitle = pin.get("description", "")[:80] if pin else ""
         img = add_pinterest_overlay(img, pin_title, subtitle=subtitle, price=price)
 
         path = os.path.join(out_dir, f"pinterest_{i+1}.jpg")
         img.save(path, "JPEG", quality=92)
         pin_images.append(path)
-        print(f"[ImageGen] ✓ Pinterest pin {i+1} saved: {path}")
+        print(f"[ImageGen] Pinterest pin {i+1} saved: {path}")
 
-        # Small delay between DALL-E calls
         if i < num_pins - 1:
             time.sleep(2)
 
     results["pinterest"] = pin_images
 
-    # ── Instagram (DALL-E 3, square) ─────────────────────────────────────────
     print(f"[ImageGen] Generating Instagram image...")
     ig_data = content_pack.get("instagram_post", {})
     if isinstance(ig_data, dict):
@@ -436,7 +435,6 @@ def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry
     ig_img = generate_dalle_image(ig_dalle_prompt, size="1024x1024")
 
     if ig_img is None:
-        # Fallback: use first Pinterest image cropped to square
         if pin_images:
             ig_img = Image.open(pin_images[0]).convert("RGB")
         else:
@@ -449,27 +447,24 @@ def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry
         ig_img = smart_crop(ig_img, *PLATFORM_SPECS["instagram"]["size"])
         ig_headline = ig_data.get("headline", "") if isinstance(ig_data, dict) else ""
         if not ig_headline:
-            ig_headline = title[:50]  # fallback to product title
+            ig_headline = title[:50]
         ig_img = add_instagram_overlay(ig_img, headline=ig_headline, price=price)
         ig_path = os.path.join(out_dir, "instagram.jpg")
         ig_img.save(ig_path, "JPEG", quality=92)
         results["instagram"] = [ig_path]
-        print(f"[ImageGen] ✓ Instagram saved: {ig_path}")
+        print(f"[ImageGen] Instagram saved: {ig_path}")
 
-        # ── Facebook (crop from Instagram image) ─────────────────────────────
         fb_img = smart_crop(ig_img.copy(), *PLATFORM_SPECS["facebook"]["size"])
         fb_path = os.path.join(out_dir, "facebook.jpg")
         fb_img.save(fb_path, "JPEG", quality=92)
         results["facebook"] = [fb_path]
-        print(f"[ImageGen] ✓ Facebook saved: {fb_path}")
+        print(f"[ImageGen] Facebook saved: {fb_path}")
 
     return results
 
 
-# ─── Legacy wrappers ──────────────────────────────────────────────────────────
 def generate_ecommerce_images(content_pack: dict, product_handle: str,
                                output_dir: str = None, dry_run: bool = False) -> dict:
-    """Legacy wrapper — reads product from content_pack['product']."""
     try:
         from config import OUTPUT_DIR_ECOMMERCE
     except ImportError:
@@ -485,5 +480,4 @@ def generate_ecommerce_images(content_pack: dict, product_handle: str,
 
 
 def generate_ai_channel_images(content_pack: dict, topic_slug: str, output_dir: str = None) -> dict:
-    """AI channel images — not needed for this product-based approach."""
     return {}
