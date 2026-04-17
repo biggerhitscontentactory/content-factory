@@ -392,9 +392,36 @@
 
       <div class="btn-row" style="margin-bottom:14px;">
         <button class="btn btn-blue" onclick="fetchBoards()">🔄 Fetch My Boards</button>
+        <button class="btn btn-amber" onclick="showAddBoardForm()">➕ Add Board Manually</button>
         <button class="btn btn-green" onclick="saveBoardConfig()" id="save-boards-btn" disabled>💾 Save Board Config</button>
       </div>
       <div id="board-last-fetched" style="font-size:12px;color:#64748b;margin-bottom:12px;"></div>
+
+      <!-- Manual Board Entry Form -->
+      <div id="add-board-form" style="display:none;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:12px;">➕ Add Board Manually</div>
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.5;">
+          Get your board ID from the Pinterest URL: open a board, look at the URL —
+          <code style="background:#0f172a;padding:2px 6px;border-radius:4px;color:#38bdf8;">pinterest.com/username/board-name/</code>
+          — the numeric board ID is in the page source (right-click → View Source → search "board_id").
+          Or use the board URL slug itself as the ID (OneUp accepts both).
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <label style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px;">Board Name *</label>
+            <input id="manual-board-name" type="text" placeholder="e.g. Patriotic Gifts" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:8px 10px;font-size:13px;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px;">Board ID *</label>
+            <input id="manual-board-id" type="text" placeholder="e.g. 123456789012345678" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:8px 10px;font-size:13px;box-sizing:border-box;">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-green" onclick="addBoardManually()" style="font-size:12px;padding:6px 14px;">✓ Add Board</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('add-board-form').style.display='none'" style="font-size:12px;padding:6px 14px;">Cancel</button>
+        </div>
+        <div id="add-board-result" style="font-size:12px;margin-top:8px;color:#94a3b8;"></div>
+      </div>
 
       <!-- Board list with tier assignment -->
       <div id="board-list-wrap" style="display:none;">
@@ -1255,9 +1282,10 @@ function renderBoardRows(cfg) {
         onchange="onBoardConfigChange()">${tierOpts}</select>
       <select data-board-id="${b.id}" data-type="category" style="background:#1e293b;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:4px 6px;font-size:12px;width:100%;"
         onchange="onBoardConfigChange()">${catOpts}</select>
-      <div style="text-align:center;">
+      <div style="text-align:center;display:flex;align-items:center;justify-content:center;gap:6px;">
         <input type="checkbox" data-board-id="${b.id}" data-type="repin" ${repinChecked}
           style="width:18px;height:18px;cursor:pointer;" onchange="onBoardConfigChange()">
+        ${b.manual ? `<button onclick="deleteBoard('${b.id}')" title="Remove board" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:0;line-height:1;">&#x2715;</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -1306,6 +1334,90 @@ async function saveBoardConfig() {
     document.getElementById('repin-boards-count').textContent = repinBoards.length;
   } catch(e) {
     output.textContent = 'Save error: ' + e.message;
+  }
+}
+
+// ── Manual Board Entry ───────────────────────────────────────────────────────
+function showAddBoardForm() {
+  const form = document.getElementById('add-board-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  document.getElementById('add-board-result').textContent = '';
+}
+
+async function addBoardManually() {
+  const name = document.getElementById('manual-board-name').value.trim();
+  const id   = document.getElementById('manual-board-id').value.trim();
+  const result = document.getElementById('add-board-result');
+  if (!name || !id) {
+    result.style.color = '#ef4444';
+    result.textContent = 'Both Board Name and Board ID are required';
+    return;
+  }
+  result.style.color = '#94a3b8';
+  result.textContent = 'Adding...';
+  try {
+    const resp = await fetch('/api/boards/add', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      result.style.color = '#4ade80';
+      result.textContent = data.message;
+      document.getElementById('manual-board-name').value = '';
+      document.getElementById('manual-board-id').value = '';
+      await loadBoardConfig();
+      document.getElementById('save-boards-btn').disabled = false;
+    } else {
+      result.style.color = '#ef4444';
+      result.textContent = data.message;
+    }
+  } catch(e) {
+    result.style.color = '#ef4444';
+    result.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function deleteBoard(boardId) {
+  if (!confirm('Remove this board from the list?')) return;
+  try {
+    const resp = await fetch('/api/boards/delete', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: boardId }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      await loadBoardConfig();
+    } else {
+      alert('Error: ' + data.message);
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function loadBoardConfig() {
+  try {
+    const resp = await fetch('/api/boards', { headers: authHeaders() });
+    const cfg = await resp.json();
+    _boardsData = cfg;
+    if (cfg.boards && cfg.boards.length > 0) {
+      renderBoardRows(cfg);
+      document.getElementById('board-list-wrap').style.display = 'block';
+      const lastFetched = document.getElementById('board-last-fetched');
+      const count = cfg.boards.length;
+      const manualCount = (cfg.boards || []).filter(b => b.manual).length;
+      if (cfg.last_fetched) {
+        lastFetched.textContent = count + ' boards loaded (' + manualCount + ' manual)';
+      } else if (count > 0) {
+        lastFetched.textContent = count + ' board(s) configured manually';
+      }
+      document.getElementById('repin-boards-count').textContent = cfg.repin_boards ? cfg.repin_boards.length : 0;
+    }
+  } catch(e) {
+    console.error('loadBoardConfig error:', e);
   }
 }
 
@@ -1371,27 +1483,7 @@ async function loadRepinLog() {
   }
 }
 
-// Load board config on Setup tab open (show cached boards if available)
-async function loadBoardConfig() {
-  try {
-    const resp = await fetch('/api/boards', { headers: authHeaders() });
-    const cfg  = await resp.json();
-    if (cfg.boards && cfg.boards.length > 0) {
-      _boardsData = cfg;
-      renderBoardRows(cfg);
-      document.getElementById('board-list-wrap').style.display = 'block';
-      document.getElementById('save-boards-btn').disabled = false;
-      document.getElementById('board-last-fetched').textContent =
-        `Cached: ${cfg.boards.length} boards${cfg.last_fetched ? ' (last fetched ' + cfg.last_fetched.substring(0,10) + ')' : ''}`;
-      document.getElementById('repin-boards-count').textContent = cfg.repin_boards ? cfg.repin_boards.length : 0;
-    }
-    if (cfg.pinterest_token === false) {
-      document.getElementById('board-token-warning').style.display = 'block';
-    }
-  } catch(e) {
-    // silently fail — boards just won't be pre-loaded
-  }
-}
+// loadBoardConfig defined above in Manual Board Entry section
 
 // ── Init ─────────────────────────────────────────────────────────────────────────────
 loadStats();

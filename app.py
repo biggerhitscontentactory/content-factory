@@ -509,6 +509,71 @@ def api_boards_save():
         return jsonify({"success": False, "message": str(e)})
 
 
+# ─── API: Pinterest Manual Board Add/Delete ───────────────────────────────────
+@app.route("/api/boards/add", methods=["POST"])
+@login_required
+def api_boards_add():
+    """Manually add a board by name and ID (no Pinterest API needed)."""
+    try:
+        sys.path.insert(0, MOD_DIR)
+        from board_manager import load_board_config, save_board_config
+        data = request.json or {}
+        board_id   = (data.get("id") or "").strip()
+        board_name = (data.get("name") or "").strip()
+        if not board_id or not board_name:
+            return jsonify({"success": False, "message": "Both board ID and board name are required"})
+        config = load_board_config()
+        boards = config.get("boards", [])
+        # Check for duplicate
+        if any(b["id"] == board_id for b in boards):
+            return jsonify({"success": False, "message": f"Board ID '{board_id}' already exists"})
+        boards.append({
+            "id": board_id,
+            "name": board_name,
+            "description": data.get("description", ""),
+            "pin_count": 0,
+            "privacy": "PUBLIC",
+            "owner": "",
+            "manual": True,
+        })
+        config["boards"] = boards
+        if not config.get("default_board_id"):
+            config["default_board_id"] = board_id
+        save_board_config(config)
+        return jsonify({"success": True, "message": f"Board '{board_name}' added", "boards": boards})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+@app.route("/api/boards/delete", methods=["POST"])
+@login_required
+def api_boards_delete():
+    """Remove a manually-added board by ID."""
+    try:
+        sys.path.insert(0, MOD_DIR)
+        from board_manager import load_board_config, save_board_config
+        data = request.json or {}
+        board_id = (data.get("id") or "").strip()
+        if not board_id:
+            return jsonify({"success": False, "message": "board ID required"})
+        config = load_board_config()
+        before = len(config.get("boards", []))
+        config["boards"] = [b for b in config.get("boards", []) if b["id"] != board_id]
+        # Clean up references
+        config["repin_boards"] = [b for b in config.get("repin_boards", []) if b != board_id]
+        if config.get("default_board_id") == board_id:
+            config["default_board_id"] = config["boards"][0]["id"] if config["boards"] else ""
+        for k, v in list(config.get("tier_map", {}).items()):
+            if v == board_id:
+                del config["tier_map"][k]
+        for k, v in list(config.get("category_map", {}).items()):
+            if v == board_id:
+                del config["category_map"][k]
+        save_board_config(config)
+        removed = before - len(config["boards"])
+        return jsonify({"success": True, "message": f"Removed {removed} board(s)", "boards": config["boards"]})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
 # ─── API: Pinterest Repinner ───────────────────────────────────────────────────────────────
 @app.route("/api/repin", methods=["POST"])
 @login_required
