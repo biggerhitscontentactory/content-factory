@@ -144,7 +144,7 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
                 print("[Runner] Scheduling posts via OneUp...")
                 scheduled = schedule_ecommerce_content_pack(
                     content_pack, images, ACCOUNT_IDS["ecommerce"],
-                    pinterest_board_id=board_id
+                    dry_run=False
                 )
                 log_scheduled_posts(scheduled, title, "ecommerce")
                 print(f"[Runner] Scheduled {len(scheduled)} posts")
@@ -369,20 +369,53 @@ def _mark_topic_done(topic_file, topic_text):
 
 
 def get_oneup_account_ids():
+    """
+    Fetch and display all connected OneUp accounts with their social_network_id values.
+    The real OneUp API returns: username, full_name, social_network_type
+    social_network_id is retrieved from /listcategoryaccount and is what goes in env vars.
+    """
     accounts = get_oneup_accounts()
     if not accounts:
         print("[Runner] No OneUp accounts found.")
         print("[Runner] Make sure ONEUP_API_KEY is set and accounts are connected in OneUp.")
         return
-    print(f"\n[Runner] Found {len(accounts)} OneUp accounts:\n")
+    # Also fetch categories to get social_network_id values
+    from scheduler import get_oneup_categories, get_category_accounts
+    categories = get_oneup_categories()
+    # Build map of (network_type_lower, name) -> social_network_id
+    sn_id_map = {}
+    for cat in categories:
+        cat_id = cat.get("category_id") or cat.get("id")
+        if cat_id:
+            cat_accounts = get_category_accounts(cat_id)
+            for ca in cat_accounts:
+                nt = ca.get("social_network_type", "").lower()
+                nm = ca.get("social_network_name", "")
+                sn_id_map[(nt, nm)] = ca.get("social_network_id", "")
+    platform_map = {
+        "pinterest": "PINTEREST", "instagram": "INSTAGRAM", "facebook": "FACEBOOK",
+        "linkedin": "LINKEDIN", "twitter": "TWITTER", "x": "TWITTER",
+        "tiktok": "TIKTOK", "youtube": "YOUTUBE",
+    }
+    print(f"\n[Runner] Found {len(accounts)} connected OneUp accounts:\n")
     for acc in accounts:
-        platform = acc.get("service", acc.get("type", "unknown")).lower()
-        name = acc.get("name", "")
-        acc_id = acc.get("id", "")
-        print(f"  Platform : {platform.upper()}")
-        print(f"  Name     : {name}")
-        print(f"  ID       : {acc_id}")
-        print(f"  Env Var  : ONEUP_{platform.upper()}_ID={acc_id}")
+        network_type = acc.get("social_network_type", "unknown")
+        username = acc.get("username", "")
+        full_name = acc.get("full_name", "")
+        is_expired = acc.get("is_expired", 0)
+        nt_lower = network_type.lower()
+        sn_id = sn_id_map.get((nt_lower, username), "") or sn_id_map.get((nt_lower, full_name), "")
+        env_platform = platform_map.get(nt_lower, network_type.upper())
+        status = "EXPIRED" if is_expired else "active"
+        print(f"  Platform : {network_type}")
+        print(f"  Username : {username} ({full_name})")
+        print(f"  Status   : {status}")
+        if sn_id:
+            print(f"  ID       : {sn_id}")
+            print(f"  Env Var  : ONEUP_{env_platform}_ID={sn_id}")
+        else:
+            print(f"  ID       : (add this account to a OneUp Category first)")
+            print(f"  Env Var  : ONEUP_{env_platform}_ID=<from OneUp category accounts>")
         print()
 
 
