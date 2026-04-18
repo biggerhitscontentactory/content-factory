@@ -186,29 +186,70 @@ def run_ecommerce_batch(count=5, dry_run=False, product_url=None):
             for platform, paths in images.items():
                 web_images[platform] = [_relative_output_path(p) for p in paths]
 
+            # ── Full rich preview payload (mirrors Manual Post format) ──────
+            # Pinterest: full titles[], descriptions[], hashtags, link per pin
+            rich_pins = []
+            for p in pins[:3]:
+                rich_pins.append({
+                    "titles":       p.get("titles", [p.get("title", "")]),
+                    "descriptions": p.get("descriptions", [p.get("description", "")]),
+                    "hashtags":     p.get("hashtags", ""),
+                    "link":         p.get("link", product.get("url", "")),
+                })
+
+            # Instagram: full titles[] (captions), hashtags, link
+            ig_rich = {}
+            if isinstance(ig_post, dict):
+                ig_rich = {
+                    "titles":   ig_post.get("titles", [ig_post.get("caption", "")]),
+                    "hashtags": ig_post.get("hashtags", ""),
+                    "link":     ig_post.get("link", product.get("url", "")),
+                }
+
+            # Facebook: full titles[], link
+            fb_rich = {}
+            if isinstance(fb_post, dict):
+                fb_rich = {
+                    "titles": fb_post.get("titles", [fb_post.get("text", "")]),
+                    "link":   fb_post.get("link", product.get("url", "")),
+                }
+
+            # TikTok: full titles[], hashtags, link
+            tt_post = content_pack.get("tiktok_post", {})
+            tt_rich = {}
+            if isinstance(tt_post, dict):
+                tt_rich = {
+                    "titles":   tt_post.get("titles", [tt_post.get("script", tt_post.get("hook", ""))]),
+                    "hashtags": tt_post.get("hashtags", ""),
+                    "link":     tt_post.get("link", product.get("url", "")),
+                }
+
+            # YouTube: full titles[], description, link
+            yt_post = content_pack.get("youtube_post", {})
+            yt_rich = {}
+            if isinstance(yt_post, dict):
+                yt_rich = {
+                    "titles":       yt_post.get("titles", [yt_post.get("description", "")]),
+                    "descriptions": [yt_post.get("description", "")] if yt_post.get("description") else [],
+                    "link":         yt_post.get("link", product.get("url", "")),
+                }
+
             preview_item = {
-                "title": title,
-                "handle": handle,
-                "tier": product.get("tier", 3),
-                "price": product.get("price", 0),
-                "board_id": board_id,
-                "images": web_images,
-                "pinterest_pins": [
-                    {
-                        "title": p.get("title", ""),
-                        "description": p.get("description", "")[:200],
-                    }
-                    for p in pins[:3]
-                ],
-                "instagram": {
-                    "caption": ig_caption[:300],
-                    "hashtags": ig_hashtags[:200],
-                },
-                "facebook": {
-                    "text": fb_text[:300],
-                },
-                "scheduled": len(scheduled),
-                "dry_run": dry_run,
+                "title":          title,
+                "handle":         handle,
+                "tier":           product.get("tier", 3),
+                "price":          product.get("price", 0),
+                "product_url":    product.get("url", ""),
+                "board_id":       board_id,
+                "images":         web_images,
+                # Rich per-platform content (full options, no truncation)
+                "pinterest_pins": rich_pins,
+                "instagram_post": ig_rich,
+                "facebook_post":  fb_rich,
+                "tiktok_post":    tt_rich,
+                "youtube_post":   yt_rich,
+                "scheduled":      len(scheduled),
+                "dry_run":        dry_run,
             }
             preview_items.append(preview_item)
 

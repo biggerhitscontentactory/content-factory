@@ -1009,101 +1009,190 @@ async function pollJob(jobId, outputId, spinnerId, mode) {
 function renderPreviewGallery(items) {
   const container = document.getElementById('ec-preview-inner');
   if (!container) return;
+  container.innerHTML = '';
 
-  let html = '';
-  items.forEach(item => {
+  items.forEach((item, itemIdx) => {
     const tier = item.tier || 3;
     const price = item.price ? `$${item.price}` : '';
-    const dryLabel = item.dry_run ? ' <span style="color:#f59e0b;font-size:10px;">(DRY RUN — not posted)<\/span>' : '';
+    const dryLabel = item.dry_run
+      ? '<span style="color:#f59e0b;font-size:11px;font-weight:600;"> ✂️ DRY RUN — not posted<\/span>'
+      : '<span style="color:#22c55e;font-size:11px;font-weight:600;"> ✓ Posted<\/span>';
+    const productUrl = item.product_url || '';
 
-    html += `<div class="preview-product">
-      <div class="preview-product-header">
-        <span class="tier-badge t${tier}">T${tier}<\/span>
-        <div>
-          <div class="preview-product-title">${escHtml(item.title)}<\/div>
-          <div class="preview-product-meta">${price}${dryLabel}<\/div>
-        <\/div>
+    // ── Product header card ──────────────────────────────────────────────
+    const card = document.createElement('div');
+    card.className = 'preview-product';
+    card.style.cssText = 'margin-bottom:28px;';
+
+    // Header row
+    const header = document.createElement('div');
+    header.className = 'preview-product-header';
+    header.innerHTML = `
+      <span class="tier-badge t${tier}">T${tier}<\/span>
+      <div style="flex:1;">
+        <div class="preview-product-title">${escHtml(item.title)}<\/div>
+        <div class="preview-product-meta">${price}${dryLabel}<\/div>
       <\/div>
-      <div class="preview-platforms">`;
+      ${productUrl ? `<a href="${productUrl}" target="_blank" style="font-size:11px;color:#60a5fa;white-space:nowrap;">🔗 View Product<\/a>` : ''}
+    `;
+    card.appendChild(header);
 
-    // Pinterest pins
-    const pinImgs = (item.images && item.images.pinterest) || [];
-    const pins = item.pinterest_pins || [];
-    if (pinImgs.length > 0) {
-      html += `<div class="preview-platform">
-        <div class="preview-platform-label">📌 Pinterest Pins (${pinImgs.length})<\/div>
-        <div class="preview-images">`;
-      pinImgs.forEach((imgPath, i) => {
-        const pin = pins[i] || {};
-        const imgUrl = '/' + imgPath;
-        html += `<div class="preview-img-wrap">
-          <img src="${imgUrl}" width="140" height="210" loading="lazy"
-               onclick="openLightbox('${imgUrl}')" title="${escHtml(pin.title||'')}">
-          <div class="img-label">Pin ${i+1}<\/div>
-        <\/div>`;
+    // ── Images row ───────────────────────────────────────────────────────
+    const allImgs = [];
+    const imgsByPlatform = item.images || {};
+    const platformOrder = ['pinterest','instagram','facebook','tiktok','youtube'];
+    platformOrder.forEach(plat => {
+      const paths = imgsByPlatform[plat] || [];
+      paths.forEach((p, i) => {
+        allImgs.push({ plat, path: p, label: plat + (paths.length > 1 ? ' ' + (i+1) : '') });
       });
-      html += `<\/div>`;
-      // Show first pin caption
-      if (pins[0]) {
-        html += `<div class="preview-caption">
-          <strong>Pin 1:<\/strong> ${escHtml(pins[0].title || '')}<br>
-          <span style="color:#64748b;">${escHtml((pins[0].description||'').substring(0,180))}${(pins[0].description||'').length>180?'…':''}<\/span>
-        <\/div>`;
-      }
-      html += `<\/div>`;
+    });
+
+    if (allImgs.length > 0) {
+      const imgSection = document.createElement('div');
+      imgSection.style.cssText = 'margin-bottom:18px;';
+      imgSection.innerHTML = `<div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">🖼 Generated Images<\/div>`;
+      const imgRow = document.createElement('div');
+      imgRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;';
+      allImgs.forEach(({plat, path, label}) => {
+        const isVert = plat === 'pinterest' || plat === 'tiktok';
+        const imgW = isVert ? 110 : 160;
+        const imgH = isVert ? 165 : (plat === 'instagram' ? 160 : 84);
+        const imgUrl = '/output/' + path.replace(/.*output\//, '');
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'text-align:center;';
+        wrap.innerHTML = `
+          <div style="font-size:10px;color:#94a3b8;margin-bottom:3px;text-transform:uppercase;">${label}<\/div>
+          <a href="${imgUrl}" target="_blank">
+            <img src="${imgUrl}" width="${imgW}" height="${imgH}" loading="lazy"
+                 style="border-radius:6px;border:1px solid #334155;object-fit:cover;cursor:pointer;"
+                 onclick="event.preventDefault();openLightbox('${imgUrl}')">
+          <\/a>
+        `;
+        imgRow.appendChild(wrap);
+      });
+      imgSection.appendChild(imgRow);
+      card.appendChild(imgSection);
     }
 
-    // Instagram
-    const igImgs = (item.images && item.images.instagram) || [];
-    if (igImgs.length > 0) {
-      const ig = item.instagram || {};
-      const imgUrl = '/' + igImgs[0];
-      html += `<div class="preview-platform">
-        <div class="preview-platform-label">📸 Instagram<\/div>
-        <div class="preview-images">
-          <div class="preview-img-wrap">
-            <img src="${imgUrl}" width="160" height="160" loading="lazy"
-                 onclick="openLightbox('${imgUrl}')">
-            <div class="img-label">Square<\/div>
-          <\/div>
-        <\/div>`;
-      if (ig.caption) {
-        html += `<div class="preview-caption">
-          <strong>Caption:<\/strong> ${escHtml(ig.caption.substring(0,200))}${ig.caption.length>200?'…':''}
-        <\/div>`;
-      }
-      html += `<\/div>`;
-    }
+    // ── Platform content sections ─────────────────────────────────────────
+    // Each platform gets its own collapsible section with full copy-paste blocks
+    const platforms = [
+      { key: 'pinterest', label: '📌 Pinterest Pins', data: item.pinterest_pins, multi: true },
+      { key: 'instagram', label: '📸 Instagram',      data: item.instagram_post ? [item.instagram_post] : null },
+      { key: 'facebook',  label: '👍 Facebook',       data: item.facebook_post  ? [item.facebook_post]  : null },
+      { key: 'tiktok',    label: '🎵 TikTok',         data: item.tiktok_post    ? [item.tiktok_post]    : null },
+      { key: 'youtube',   label: '▶️ YouTube',         data: item.youtube_post   ? [item.youtube_post]   : null },
+    ];
 
-    // Facebook
-    const fbImgs = (item.images && item.images.facebook) || [];
-    if (fbImgs.length > 0) {
-      const fb = item.facebook || {};
-      const imgUrl = '/' + fbImgs[0];
-      html += `<div class="preview-platform">
-        <div class="preview-platform-label">📘 Facebook<\/div>
-        <div class="preview-images">
-          <div class="preview-img-wrap">
-            <img src="${imgUrl}" width="220" height="116" loading="lazy"
-                 onclick="openLightbox('${imgUrl}')">
-            <div class="img-label">Landscape<\/div>
-          <\/div>
-        <\/div>`;
-      if (fb.text) {
-        html += `<div class="preview-caption">
-          <strong>Post:<\/strong> ${escHtml(fb.text.substring(0,200))}${fb.text.length>200?'…':''}
-        <\/div>`;
-      }
-      html += `<\/div>`;
-    }
+    platforms.forEach(({key, label, data, multi}) => {
+      if (!data || !data.length) return;
 
-    html += `<\/div><\/div>`; // close preview-platforms + preview-product
+      const section = document.createElement('div');
+      section.style.cssText = 'margin-bottom:16px;';
+
+      // Collapsible header
+      const sectionId = `dry-${itemIdx}-${key}`;
+      section.innerHTML = `
+        <div onclick="toggleSection('${sectionId}')"
+             style="display:flex;align-items:center;justify-content:space-between;
+                    cursor:pointer;background:#1e293b;border-radius:8px;
+                    padding:10px 14px;margin-bottom:0;user-select:none;">
+          <span style="font-size:13px;font-weight:700;color:#f1f5f9;">${label}<\/span>
+          <span id="${sectionId}-arrow" style="color:#64748b;font-size:12px;">▼<\/span>
+        <\/div>
+        <div id="${sectionId}" style="display:none;padding:12px 0 0 0;">
+        <\/div>
+      `;
+      card.appendChild(section);
+
+      // Render content into the collapsible body
+      const body = section.querySelector(`#${sectionId}`);
+      const containerId = `dry-content-${itemIdx}-${key}-${Date.now()}`;
+      body.id = containerId;
+
+      // Build content HTML using same logic as renderPlatformSection
+      let cHtml = '';
+      (data || []).forEach((item2, idx2) => {
+        if (!item2) return;
+        const titles = item2.titles || [];
+        const descs  = item2.descriptions || [];
+        const hashtags = item2.hashtags || '';
+        const link = item2.link || productUrl || '';
+        const pinLabel = (data.length > 1) ? `Pin ${idx2+1}` : '';
+
+        cHtml += `<div style="border:1px solid #1e293b;border-radius:8px;padding:14px;margin-bottom:12px;background:#0f172a;">`;
+        if (pinLabel) cHtml += `<div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:10px;">${pinLabel}<\/div>`;
+
+        // Titles
+        if (titles.length) {
+          cHtml += `<div style="margin-bottom:12px;">`;
+          cHtml += `<div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📋 Titles (pick one)<\/div>`;
+          titles.forEach((t, ti) => {
+            cHtml += `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;">
+              <span style="font-size:11px;color:#64748b;min-width:18px;padding-top:3px;">${ti+1}.<\/span>
+              <div style="flex:1;background:#1e293b;border-radius:6px;padding:8px 10px;font-size:13px;color:#f1f5f9;line-height:1.5;">${escHtml(t)}<\/div>
+              <button onclick="copyText(this,'${escapeJs(t)}')" style="background:#334155;border:none;border-radius:4px;padding:4px 8px;color:#94a3b8;cursor:pointer;font-size:11px;white-space:nowrap;">📋 Copy<\/button>
+            <\/div>`;
+          });
+          cHtml += `<\/div>`;
+        }
+
+        // Descriptions
+        if (descs.length) {
+          cHtml += `<div style="margin-bottom:12px;">`;
+          cHtml += `<div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📝 Descriptions / Captions (pick one)<\/div>`;
+          descs.forEach((d, di) => {
+            cHtml += `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;">
+              <span style="font-size:11px;color:#64748b;min-width:18px;padding-top:3px;">${di+1}.<\/span>
+              <div style="flex:1;background:#1e293b;border-radius:6px;padding:8px 10px;font-size:13px;color:#f1f5f9;line-height:1.5;">${escHtml(d)}<\/div>
+              <button onclick="copyText(this,'${escapeJs(d)}')" style="background:#334155;border:none;border-radius:4px;padding:4px 8px;color:#94a3b8;cursor:pointer;font-size:11px;white-space:nowrap;">📋 Copy<\/button>
+            <\/div>`;
+          });
+          cHtml += `<\/div>`;
+        }
+
+        // Hashtags
+        if (hashtags) {
+          cHtml += `<div style="margin-bottom:12px;">
+            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;"># Hashtags<\/div>
+            <div style="display:flex;align-items:flex-start;gap:8px;">
+              <div style="flex:1;background:#1e293b;border-radius:6px;padding:8px 10px;font-size:12px;color:#60a5fa;line-height:1.6;">${escHtml(hashtags)}<\/div>
+              <button onclick="copyText(this,'${escapeJs(hashtags)}')" style="background:#334155;border:none;border-radius:4px;padding:4px 8px;color:#94a3b8;cursor:pointer;font-size:11px;white-space:nowrap;">📋 Copy<\/button>
+            <\/div>
+          <\/div>`;
+        }
+
+        // Link
+        if (link) {
+          cHtml += `<div>
+            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">🔗 Product Link<\/div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;background:#1e293b;border-radius:6px;padding:8px 10px;font-size:12px;color:#34d399;word-break:break-all;">${escHtml(link)}<\/div>
+              <button onclick="copyText(this,'${escapeJs(link)}')" style="background:#334155;border:none;border-radius:4px;padding:4px 8px;color:#94a3b8;cursor:pointer;font-size:11px;white-space:nowrap;">📋 Copy<\/button>
+            <\/div>
+          <\/div>`;
+        }
+
+        cHtml += `<\/div>`;
+      });
+      body.innerHTML = cHtml;
+    });
+
+    container.appendChild(card);
   });
 
-  container.innerHTML = html;
   document.getElementById('ec-preview').style.display = 'block';
-  // Scroll to preview
   document.getElementById('ec-preview').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  const arrow = document.getElementById(id + '-arrow');
+  if (!el) return;
+  const isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
 }
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
