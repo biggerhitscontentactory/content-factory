@@ -975,7 +975,7 @@ def api_manual_post():
         out_dir = os.path.join(
             os.path.dirname(__file__), "output", "manual", handle
         )
-        image_paths = generate_manual_post_images(product, out_dir)
+        image_paths = generate_manual_post_images(product, out_dir, content_pack=content_pack)
 
         # Convert absolute paths to relative for serving
         base = os.path.join(os.path.dirname(__file__), "output")
