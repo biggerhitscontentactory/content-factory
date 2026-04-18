@@ -73,7 +73,6 @@ def _load_font(size: int, bold: bool = True):
     """
     Load a font at the given pixel size.
     Priority: bundled repo font -> system font -> PIL default (last resort).
-    Logs which path was used so Railway logs show what is happening.
     """
     primary = _FONT_BOLD if bold else _FONT_REGULAR
     fallbacks = _SYSTEM_BOLD if bold else _SYSTEM_REGULAR
@@ -151,19 +150,10 @@ def download_image(url: str):
         return None
 
 
-
-def build_product_composite(product: dict, size: tuple, bg_style: str = "gradient") -> Image.Image:
-    """
-    Build a platform image using the actual product photo on a patriotic background.
-    - Downloads the product's primary_image from Shopify CDN
-    - Places it centered on a red/white/navy gradient background
-    - Returns a PIL Image ready for overlay
-    """
-    w, h = size
-    # ── Background ────────────────────────────────────────────────────────────
-    bg = Image.new("RGB", (w, h))
+def _draw_patriotic_bg(bg: Image.Image):
+    """Draw patriotic navy→red gradient with subtle stars on a PIL Image in place."""
+    w, h = bg.size
     draw_bg = ImageDraw.Draw(bg)
-    # Patriotic gradient: deep navy top → red bottom
     navy = (13, 43, 100)
     red  = (178, 34, 34)
     for y in range(h):
@@ -172,7 +162,6 @@ def build_product_composite(product: dict, size: tuple, bg_style: str = "gradien
         g = int(navy[1] + (red[1] - navy[1]) * t)
         b = int(navy[2] + (red[2] - navy[2]) * t)
         draw_bg.line([(0, y), (w, y)], fill=(r, g, b))
-    # ── Stars pattern (subtle) ────────────────────────────────────────────────
     import random as _rnd
     _rnd.seed(42)
     for _ in range(60):
@@ -180,29 +169,86 @@ def build_product_composite(product: dict, size: tuple, bg_style: str = "gradien
         sy = _rnd.randint(0, int(h * 0.6))
         sr = _rnd.randint(1, 3)
         draw_bg.ellipse([sx-sr, sy-sr, sx+sr, sy+sr], fill=(255, 255, 255, 80))
-    # ── Product image ─────────────────────────────────────────────────────────
-    primary = product.get("primary_image", "") or (product.get("images", [""])[0] if product.get("images") else "")
+
+
+def build_product_composite(product: dict, size: tuple, bg_style: str = "gradient") -> Image.Image:
+    """
+    Build a platform image using the actual product photo as the HERO on a patriotic background.
+
+    Layout philosophy:
+    - Portrait/Square (Pinterest, Instagram, TikTok):
+        Top 12% = white text bar (added by overlay function later)
+        Middle 80% = product photo, centered, fills as much space as possible
+        Bottom 8% = URL bar (added by overlay function later)
+    - Landscape (Facebook 1200x630, YouTube 1280x720):
+        Left 45% = white text area (added by overlay function later)
+        Right 55% = product photo, vertically centered, fills the right zone
+
+    Returns a PIL Image with ONLY the background + product photo.
+    Text/URL bars are added by the overlay functions.
+    """
+    w, h = size
+    is_landscape = w > h
+
+    # ── Background ────────────────────────────────────────────────────────────
+    bg = Image.new("RGB", (w, h))
+    _draw_patriotic_bg(bg)
+
+    # ── Product image — HERO layout ───────────────────────────────────────────
+    primary = (
+        product.get("primary_image", "")
+        or (product.get("images", [""])[0] if product.get("images") else "")
+    )
     prod_img = None
     if primary:
         prod_img = download_image(primary)
+
     if prod_img:
-        # Fit product image into center 70% of canvas
-        max_w = int(w * 0.70)
-        max_h = int(h * 0.60)
-        prod_img.thumbnail((max_w, max_h), Image.LANCZOS)
-        # Center horizontally, place in middle 60% vertically
-        px = (w - prod_img.width) // 2
-        py = int(h * 0.20) + (max_h - prod_img.height) // 2
-        # Add subtle drop shadow
-        shadow = Image.new("RGBA", (prod_img.width + 20, prod_img.height + 20), (0, 0, 0, 0))
-        shadow_draw = ImageDraw.Draw(shadow)
-        shadow_draw.rectangle([10, 10, prod_img.width + 10, prod_img.height + 10], fill=(0, 0, 0, 80))
-        bg.paste(shadow.convert("RGB"), (px - 10, py - 10))
-        if prod_img.mode == "RGBA":
-            bg.paste(prod_img, (px, py), prod_img)
+        if is_landscape:
+            # Landscape: product fills right 52% of canvas, full height minus small margins
+            right_zone_x = int(w * 0.44)   # product starts here
+            right_zone_w = w - right_zone_x - int(w * 0.02)
+            margin_v = int(h * 0.06)
+            max_w = right_zone_w
+            max_h = h - margin_v * 2
+            prod_copy = prod_img.copy()
+            prod_copy.thumbnail((max_w, max_h), Image.LANCZOS)
+            # Center vertically in right zone
+            px = right_zone_x + (right_zone_w - prod_copy.width) // 2
+            py = margin_v + (max_h - prod_copy.height) // 2
         else:
-            bg.paste(prod_img, (px, py))
+            # Portrait/Square: product fills center zone below text bar
+            # Text bar will be ~12% of height at top, URL bar ~8% at bottom
+            text_bar_h = int(h * 0.12)
+            url_bar_h  = int(h * 0.08)
+            margin_h   = int(w * 0.04)   # horizontal margin
+            available_w = w - margin_h * 2
+            available_h = h - text_bar_h - url_bar_h - int(h * 0.02)
+            prod_copy = prod_img.copy()
+            prod_copy.thumbnail((available_w, available_h), Image.LANCZOS)
+            # Center horizontally, place below text bar zone
+            px = (w - prod_copy.width) // 2
+            py = text_bar_h + (available_h - prod_copy.height) // 2
+
+        # White glow/halo behind product for clean separation from background
+        glow_pad = max(int(min(w, h) * 0.012), 6)
+        glow_rect = [
+            px - glow_pad,
+            py - glow_pad,
+            px + prod_copy.width + glow_pad,
+            py + prod_copy.height + glow_pad,
+        ]
+        draw_bg2 = ImageDraw.Draw(bg)
+        draw_bg2.rounded_rectangle(glow_rect, radius=glow_pad * 2, fill=(255, 255, 255))
+
+        # Paste product photo
+        if prod_copy.mode == "RGBA":
+            bg.paste(prod_copy, (px, py), prod_copy)
+        else:
+            bg.paste(prod_copy, (px, py))
+
     return bg
+
 
 def generate_dalle_image(prompt: str, size: str = "1024x1792"):
     try:
@@ -233,7 +279,7 @@ def build_pinterest_prompt(product: dict, pin_title: str, angle_idx: int) -> str
         f"Style: bright, clean, professional lifestyle photography. "
         f"Color palette: red, white, navy blue, gold accents. "
         f"Props: mini American flags, gold stars, red-white-blue confetti or ribbon. "
-        f"The top 20% of the image should be a clean white or very light area suitable for bold text overlay. "
+        f"The top 12% of the image should be a clean white area for text overlay. "
         f"Bottom right corner should have a small subtle watermark area. "
         f"Photorealistic, high quality, warm inviting atmosphere. "
         f"NO text, NO words, NO labels in the image itself."
@@ -261,27 +307,22 @@ def build_instagram_prompt(product: dict, image_prompt: str = "") -> str:
 
 def add_pinterest_overlay(img, headline: str, subtitle: str = "", price: str = ""):
     """
-    Add Pinterest-style overlay.
-    HARDCODED large pixel sizes (not fractions) -- always readable.
-    Fonts loaded from bundled repo files so Railway always works.
-
-    At 1000px width:
-      Headline  = 96px bold
-      Subtitle  = 52px regular
-      Price     = 64px bold
-      Watermark = 36px bold
+    Add Pinterest-style overlay — compact top bar so product photo is the HERO.
+    Text bar is capped at 12% of canvas height.
+    Font size is readable but not dominant — product photo must be the focus.
     """
     w, h = img.size
     draw = ImageDraw.Draw(img)
 
     scale = w / 1000.0
 
-    HEADLINE_PX  = max(int(96  * scale), 80)
-    SUBTITLE_PX  = max(int(52  * scale), 44)
-    PRICE_PX     = max(int(64  * scale), 56)
-    WATERMARK_PX = max(int(36  * scale), 30)
+    # Compact font sizes — product photo is the hero
+    HEADLINE_PX  = max(int(54  * scale), 44)
+    SUBTITLE_PX  = max(int(30  * scale), 24)
+    WATERMARK_PX = max(int(24  * scale), 20)
+    PRICE_PX     = max(int(40  * scale), 34)
 
-    pad    = max(int(32 * scale), 24)
+    pad    = max(int(20 * scale), 16)
     text_w = w - pad * 2
 
     headline_font = get_font(HEADLINE_PX)
@@ -289,23 +330,26 @@ def add_pinterest_overlay(img, headline: str, subtitle: str = "", price: str = "
 
     headline_upper = headline.upper()
     h_lines = wrap_text(headline_upper, headline_font, text_w, draw)
+    h_lines = h_lines[:2]  # max 2 lines
 
-    h_line_h = int(HEADLINE_PX * 1.25)
-    s_line_h = int(SUBTITLE_PX * 1.30)
+    h_line_h = int(HEADLINE_PX * 1.20)
+    s_line_h = int(SUBTITLE_PX * 1.25)
 
     total_text_h = len(h_lines) * h_line_h
 
     s_lines = []
     if subtitle:
-        s_lines = wrap_text(subtitle, subtitle_font, text_w, draw)[:2]
-        total_text_h += int(SUBTITLE_PX * 0.6) + len(s_lines) * s_line_h
+        s_lines = wrap_text(subtitle, subtitle_font, text_w, draw)[:1]
+        total_text_h += int(SUBTITLE_PX * 0.5) + len(s_lines) * s_line_h
 
-    bar_padding = max(int(40 * scale), 32)
+    bar_padding = max(int(16 * scale), 12)
     bar_h = total_text_h + bar_padding * 2
-    bar_h = max(bar_h, int(h * 0.18))
+    # Cap bar at 12% of canvas height — product photo must dominate
+    bar_h = min(bar_h, int(h * 0.12))
+    bar_h = max(bar_h, int(h * 0.08))
 
     draw.rectangle([(0, 0), (w, bar_h)], fill=COLOR_WHITE)
-    accent_h = max(int(8 * scale), 6)
+    accent_h = max(int(5 * scale), 4)
     draw.rectangle([(0, bar_h - accent_h), (w, bar_h)], fill=COLOR_RED)
 
     y = (bar_h - total_text_h) // 2
@@ -316,7 +360,7 @@ def add_pinterest_overlay(img, headline: str, subtitle: str = "", price: str = "
         bbox = draw.textbbox((0, 0), line, font=headline_font)
         lw = bbox[2] - bbox[0]
         x = (w - lw) // 2
-        draw.text((x + 3, y + 3), line, font=headline_font, fill=(200, 200, 215))
+        draw.text((x + 2, y + 2), line, font=headline_font, fill=(200, 200, 215))
         draw.text((x, y), line, font=headline_font, fill=COLOR_NAVY)
         y += h_line_h
 
@@ -336,16 +380,17 @@ def add_pinterest_overlay(img, headline: str, subtitle: str = "", price: str = "
         except Exception:
             pt = f"${price}"
         pb = draw.textbbox((0, 0), pt, font=price_font)
-        pw = pb[2] - pb[0] + int(48 * scale)
-        ph = pb[3] - pb[1] + int(28 * scale)
+        pw = pb[2] - pb[0] + int(36 * scale)
+        ph = pb[3] - pb[1] + int(20 * scale)
         bx = pad
-        by = h - int(80 * scale) - ph
-        draw.rounded_rectangle([(bx + 4, by + 4), (bx + pw + 4, by + ph + 4)],
-                                radius=14, fill=(100, 0, 0))
-        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=14, fill=COLOR_RED)
+        by = h - int(60 * scale) - ph
+        draw.rounded_rectangle([(bx + 3, by + 3), (bx + pw + 3, by + ph + 3)],
+                                radius=12, fill=(100, 0, 0))
+        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=12, fill=COLOR_RED)
         draw.text((bx + pw // 2, by + ph // 2), pt, font=price_font,
                   fill=COLOR_WHITE, anchor="mm")
 
+    # Watermark bottom-right
     wm_font = get_font(WATERMARK_PX)
     wm_text = "OfficialUSAStore.com"
     wb = draw.textbbox((0, 0), wm_text, font=wm_font)
@@ -353,11 +398,11 @@ def add_pinterest_overlay(img, headline: str, subtitle: str = "", price: str = "
     wm_h = wb[3] - wb[1]
     wm_x = w - pad - wm_w
     wm_y = h - pad - wm_h
-    bg_pad = int(12 * scale)
+    bg_pad = int(8 * scale)
     draw.rounded_rectangle(
         [(wm_x - bg_pad, wm_y - bg_pad // 2),
          (wm_x + wm_w + bg_pad, wm_y + wm_h + bg_pad // 2)],
-        radius=8, fill=(0, 0, 0, 180)
+        radius=6, fill=(0, 0, 0, 180)
     )
     draw.text((wm_x, wm_y), wm_text, font=wm_font, fill=COLOR_WHITE)
 
@@ -366,136 +411,126 @@ def add_pinterest_overlay(img, headline: str, subtitle: str = "", price: str = "
 
 def add_instagram_overlay(img, headline: str = "", price: str = ""):
     """
-    Add Instagram overlay with large readable text.
-    HARDCODED pixel sizes at 1080px width:
-      Headline = 88px bold
-      URL bar  = 40px bold
-      Price    = 68px bold
+    Add Instagram/Facebook/YouTube overlay — product photo is the HERO.
+
+    Portrait/Square (Instagram 1080x1080):
+      - Compact white top bar (max 12% height) with title
+      - Slim navy bottom bar with URL
+
+    Landscape (Facebook 1200x630, YouTube 1280x720):
+      - White left panel (44% width) with title text
+      - Red accent divider line
+      - Product photo fills right 52% (already placed by build_product_composite)
     """
     w, h = img.size
     draw = ImageDraw.Draw(img)
+    is_landscape = w > h
 
     scale = w / 1080.0
 
-    HEADLINE_PX  = max(int(88  * scale), 72)
-    URL_PX       = max(int(40  * scale), 32)
-    PRICE_PX     = max(int(68  * scale), 56)
+    # Compact font sizes — product photo is the hero
+    HEADLINE_PX  = max(int(50  * scale), 38)
+    URL_PX       = max(int(28  * scale), 22)
+    PRICE_PX     = max(int(40  * scale), 34)
 
-    pad    = max(int(36 * scale), 28)
-    text_w = w - pad * 2
+    pad    = max(int(22 * scale), 16)
 
-    top_bar_h = 0
-    if headline:
-        headline_font = get_font(HEADLINE_PX)
-        h_lines = wrap_text(headline.upper(), headline_font, text_w, draw)
-        h_line_h = int(HEADLINE_PX * 1.25)
+    if is_landscape:
+        # ── Landscape layout: left text panel ─────────────────────────────────
+        left_w = int(w * 0.44)
+        text_w = left_w - pad * 2
 
-        bar_padding = max(int(40 * scale), 32)
-        top_bar_h = len(h_lines) * h_line_h + bar_padding * 2
-        top_bar_h = max(top_bar_h, int(h * 0.16))
+        # White left panel
+        draw.rectangle([(0, 0), (left_w, h)], fill=COLOR_WHITE)
+        # Red accent divider
+        draw.rectangle([(left_w, 0), (left_w + 5, h)], fill=COLOR_RED)
+        # Navy bottom strip across full width
+        bottom_bar_h = max(int(44 * scale), 36)
+        draw.rectangle([(0, h - bottom_bar_h), (w, h)], fill=COLOR_NAVY)
+        url_font = get_font(URL_PX)
+        draw.text((w // 2, h - bottom_bar_h // 2), "OfficialUSAStore.com",
+                  font=url_font, fill=COLOR_GOLD, anchor="mm")
 
-        draw.rectangle([(0, 0), (w, top_bar_h)], fill=COLOR_WHITE)
-        accent_h = max(int(7 * scale), 5)
-        draw.rectangle([(0, top_bar_h - accent_h), (w, top_bar_h)], fill=COLOR_RED)
+        if headline:
+            headline_font = get_font(HEADLINE_PX)
+            h_lines = wrap_text(headline.upper(), headline_font, text_w, draw)
+            h_lines = h_lines[:4]  # max 4 lines in left panel
+            h_line_h = int(HEADLINE_PX * 1.20)
+            total_h = len(h_lines) * h_line_h
+            y = (h - bottom_bar_h - total_h) // 2
+            if y < pad:
+                y = pad
+            for line in h_lines:
+                bbox = draw.textbbox((0, 0), line, font=headline_font)
+                lw = bbox[2] - bbox[0]
+                x = (left_w - lw) // 2
+                draw.text((x + 2, y + 2), line, font=headline_font, fill=(200, 200, 215))
+                draw.text((x, y), line, font=headline_font, fill=COLOR_NAVY)
+                y += h_line_h
 
-        y = (top_bar_h - len(h_lines) * h_line_h) // 2
-        if y < bar_padding // 2:
-            y = bar_padding // 2
-        for line in h_lines:
-            bbox = draw.textbbox((0, 0), line, font=headline_font)
-            lw = bbox[2] - bbox[0]
-            x = (w - lw) // 2
-            draw.text((x + 3, y + 3), line, font=headline_font, fill=(200, 200, 215))
-            draw.text((x, y), line, font=headline_font, fill=COLOR_NAVY)
-            y += h_line_h
+    else:
+        # ── Portrait/Square layout: compact top bar ────────────────────────────
+        text_w = w - pad * 2
+        top_bar_h = 0
 
-    bottom_bar_h = max(int(72 * scale), 60)
-    draw.rectangle([(0, h - bottom_bar_h), (w, h)], fill=COLOR_NAVY)
-    url_font = get_font(URL_PX)
-    draw.text((w // 2, h - bottom_bar_h // 2), "OfficialUSAStore.com",
-              font=url_font, fill=COLOR_GOLD, anchor="mm")
+        if headline:
+            headline_font = get_font(HEADLINE_PX)
+            h_lines = wrap_text(headline.upper(), headline_font, text_w, draw)
+            h_lines = h_lines[:2]  # max 2 lines
+            h_line_h = int(HEADLINE_PX * 1.20)
 
-    if price:
-        price_font = get_font(PRICE_PX)
-        try:
-            pt = f"${float(price):.2f}"
-        except Exception:
-            pt = f"${price}"
-        pb = draw.textbbox((0, 0), pt, font=price_font)
-        pw = pb[2] - pb[0] + int(40 * scale)
-        ph = pb[3] - pb[1] + int(24 * scale)
-        bx = w - pad - pw
-        by = top_bar_h + pad
-        draw.rounded_rectangle([(bx + 4, by + 4), (bx + pw + 4, by + ph + 4)], radius=12, fill=(100, 0, 0))
-        draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=12, fill=COLOR_RED)
-        draw.text((bx + pw // 2, by + ph // 2), pt, font=price_font, fill=COLOR_WHITE, anchor="mm")
+            bar_padding = max(int(16 * scale), 12)
+            top_bar_h = len(h_lines) * h_line_h + bar_padding * 2
+            # Cap at 12% of canvas height
+            top_bar_h = min(top_bar_h, int(h * 0.12))
+            top_bar_h = max(top_bar_h, int(h * 0.08))
+
+            draw.rectangle([(0, 0), (w, top_bar_h)], fill=COLOR_WHITE)
+            accent_h = max(int(5 * scale), 4)
+            draw.rectangle([(0, top_bar_h - accent_h), (w, top_bar_h)], fill=COLOR_RED)
+
+            y = (top_bar_h - len(h_lines) * h_line_h) // 2
+            if y < bar_padding // 2:
+                y = bar_padding // 2
+            for line in h_lines:
+                bbox = draw.textbbox((0, 0), line, font=headline_font)
+                lw = bbox[2] - bbox[0]
+                x = (w - lw) // 2
+                draw.text((x + 2, y + 2), line, font=headline_font, fill=(200, 200, 215))
+                draw.text((x, y), line, font=headline_font, fill=COLOR_NAVY)
+                y += h_line_h
+
+        # Slim navy bottom bar
+        bottom_bar_h = max(int(44 * scale), 36)
+        draw.rectangle([(0, h - bottom_bar_h), (w, h)], fill=COLOR_NAVY)
+        url_font = get_font(URL_PX)
+        draw.text((w // 2, h - bottom_bar_h // 2), "OfficialUSAStore.com",
+                  font=url_font, fill=COLOR_GOLD, anchor="mm")
+
+        if price:
+            price_font = get_font(PRICE_PX)
+            try:
+                pt = f"${float(price):.2f}"
+            except Exception:
+                pt = f"${price}"
+            pb = draw.textbbox((0, 0), pt, font=price_font)
+            pw = pb[2] - pb[0] + int(32 * scale)
+            ph = pb[3] - pb[1] + int(20 * scale)
+            bx = w - pad - pw
+            by = top_bar_h + pad
+            draw.rounded_rectangle([(bx + 3, by + 3), (bx + pw + 3, by + ph + 3)], radius=10, fill=(100, 0, 0))
+            draw.rounded_rectangle([(bx, by), (bx + pw, by + ph)], radius=10, fill=COLOR_RED)
+            draw.text((bx + pw // 2, by + ph // 2), pt, font=price_font, fill=COLOR_WHITE, anchor="mm")
 
     return img
-
 
 
 def add_tiktok_overlay(img, headline: str = "", price: str = ""):
-    """Add TikTok vertical video cover overlay (1080x1920)."""
-    img = img.copy()
-    w, h = img.size
-    draw = ImageDraw.Draw(img)
-    bold_font   = _load_font(bold=True,  size=88)
-    price_font  = _load_font(bold=True,  size=72)
-    small_font  = _load_font(bold=False, size=38)
+    """Add TikTok vertical video cover overlay (1080x1920).
+    Uses the same compact top-bar style as Pinterest overlay.
+    """
+    return add_pinterest_overlay(img, headline, subtitle="Shop the link in bio 👇", price=price)
 
-    # Dark gradient at bottom 40%
-    grad_h = int(h * 0.42)
-    grad_start = h - grad_h
-    for y in range(grad_h):
-        alpha = int(200 * (y / grad_h))
-        draw.rectangle([(0, grad_start + y), (w, grad_start + y + 1)],
-                       fill=(0, 0, 0, alpha))
-
-    # Price badge top-right
-    if price:
-        badge_text = f"${price}" if not str(price).startswith("$") else price
-        bbox = draw.textbbox((0, 0), badge_text, font=price_font)
-        bw = bbox[2] - bbox[0] + 32
-        bh = bbox[3] - bbox[1] + 18
-        bx = w - bw - 24
-        by = 36
-        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=14, fill=(220, 38, 38))
-        draw.text((bx + 16, by + 9), badge_text, font=price_font, fill=(255, 255, 255))
-
-    # Headline text bottom area
-    if headline:
-        max_w = w - 60
-        words = headline.upper().split()
-        lines, line = [], []
-        for word in words:
-            test = " ".join(line + [word])
-            if draw.textlength(test, font=bold_font) <= max_w:
-                line.append(word)
-            else:
-                if line:
-                    lines.append(" ".join(line))
-                line = [word]
-        if line:
-            lines.append(" ".join(line))
-        lines = lines[:3]
-        line_h = bold_font.size + 12
-        total_h = len(lines) * line_h
-        y_start = h - total_h - 80
-        for i, ln in enumerate(lines):
-            y = y_start + i * line_h
-            draw.text((30, y + 2), ln, font=bold_font, fill=(0, 0, 0, 120))
-            draw.text((30, y), ln, font=bold_font, fill=(255, 255, 255))
-
-    # TikTok-style "SHOP NOW" CTA bar at very bottom
-    cta_h = 64
-    draw.rectangle([(0, h - cta_h), (w, h)], fill=(220, 38, 38))
-    cta_font = _load_font(bold=True, size=44)
-    cta_text = "SHOP NOW  →"
-    cta_bbox = draw.textbbox((0, 0), cta_text, font=cta_font)
-    cta_x = (w - (cta_bbox[2] - cta_bbox[0])) // 2
-    draw.text((cta_x, h - cta_h + 10), cta_text, font=cta_font, fill=(255, 255, 255))
-
-    return img
 
 def generate_product_images(product: dict, content_pack: dict, out_dir: str, dry_run: bool = False) -> dict:
     os.makedirs(out_dir, exist_ok=True)
@@ -603,14 +638,14 @@ def generate_ai_channel_images(content_pack: dict, topic_slug: str, output_dir: 
 def generate_manual_post_images(product: dict, out_dir: str) -> dict:
     """
     Generate copy-paste-ready images for the Manual Post Generator.
-    Uses the actual product photo as the base image.
+    Uses the actual product photo as the HERO image.
     Returns dict with paths for pinterest (3 pins), instagram, facebook, tiktok, youtube.
     """
     os.makedirs(out_dir, exist_ok=True)
     results = {}
     title = product.get("title", "Product")
 
-    # Pinterest — 3 pins, each with a slightly different crop/angle
+    # Pinterest — 3 pins (portrait 1000x1500)
     pin_paths = []
     for i in range(3):
         img = build_product_composite(product, PLATFORM_SPECS["pinterest"]["size"])
@@ -621,7 +656,7 @@ def generate_manual_post_images(product: dict, out_dir: str) -> dict:
             pin_paths.append(path)
     results["pinterest"] = pin_paths
 
-    # Instagram — square
+    # Instagram — square (1080x1080)
     ig_img = build_product_composite(product, PLATFORM_SPECS["instagram"]["size"])
     if ig_img:
         ig_img = add_instagram_overlay(ig_img, headline=title[:60], price="")
@@ -629,21 +664,23 @@ def generate_manual_post_images(product: dict, out_dir: str) -> dict:
         ig_img.save(ig_path, "JPEG", quality=92)
         results["instagram"] = [ig_path]
 
-        # Facebook — same as Instagram
-        fb_img = smart_crop(ig_img.copy(), *PLATFORM_SPECS["facebook"]["size"])
+    # Facebook — landscape (1200x630) — built fresh, NOT cropped from Instagram
+    fb_img = build_product_composite(product, PLATFORM_SPECS["facebook"]["size"])
+    if fb_img:
+        fb_img = add_instagram_overlay(fb_img, headline=title[:60], price="")
         fb_path = os.path.join(out_dir, "manual_facebook.jpg")
         fb_img.save(fb_path, "JPEG", quality=92)
         results["facebook"] = [fb_path]
 
-    # TikTok — vertical (same as Pinterest but with TikTok overlay)
+    # TikTok — vertical (1080x1920)
     tk_img = build_product_composite(product, (1080, 1920))
     if tk_img:
-        tk_img = add_pinterest_overlay(tk_img, title[:80], subtitle="Shop the link in bio", price="")
+        tk_img = add_tiktok_overlay(tk_img, headline=title[:80], price="")
         tk_path = os.path.join(out_dir, "manual_tiktok.jpg")
         tk_img.save(tk_path, "JPEG", quality=92)
         results["tiktok"] = [tk_path]
 
-    # YouTube thumbnail — wide
+    # YouTube thumbnail — landscape (1280x720)
     yt_img = build_product_composite(product, (1280, 720))
     if yt_img:
         yt_img = add_instagram_overlay(yt_img, headline=title[:60], price="")
