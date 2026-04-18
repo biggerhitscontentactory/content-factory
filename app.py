@@ -939,6 +939,66 @@ def api_blog_status():
     })
 
 # ─── Health Check ────────────────────────────────────────────────────────────────────
+
+@app.route("/api/manual-post", methods=["POST"])
+@login_required
+def api_manual_post():
+    """Generate images + copy-paste content pack for a single product URL."""
+    import sys, os
+    MOD_DIR = os.path.join(os.path.dirname(__file__), "modules")
+    if MOD_DIR not in sys.path:
+        sys.path.insert(0, MOD_DIR)
+    from shopify_connector import get_product_by_url, extract_product_data
+    from content_engine import generate_ecommerce_content_pack
+    from image_generator import generate_manual_post_images
+
+    data = request.get_json() or {}
+    product_url = data.get("product_url", "").strip()
+    if not product_url:
+        return jsonify({"error": "product_url is required"}), 400
+
+    try:
+        raw = get_product_by_url(product_url)
+        if not raw:
+            return jsonify({"error": f"Could not fetch product from URL: {product_url}"}), 404
+        product = extract_product_data(raw)
+        if not product:
+            return jsonify({"error": "Could not parse product data"}), 500
+
+        # Generate content pack
+        content_pack = generate_ecommerce_content_pack(product)
+        if "error" in content_pack:
+            return jsonify({"error": content_pack["error"]}), 500
+
+        # Generate images using actual product photo
+        handle = product.get("handle", "manual")
+        out_dir = os.path.join(
+            os.path.dirname(__file__), "output", "manual", handle
+        )
+        image_paths = generate_manual_post_images(product, out_dir)
+
+        # Convert absolute paths to relative for serving
+        base = os.path.join(os.path.dirname(__file__), "output")
+        rel_images = {}
+        for platform, paths in image_paths.items():
+            rel_images[platform] = [
+                os.path.relpath(p, base) for p in paths
+            ]
+
+        return jsonify({
+            "product": {
+                "title": product.get("title"),
+                "url": product.get("url"),
+                "primary_image": product.get("primary_image"),
+            },
+            "content": content_pack,
+            "images": rel_images,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "time": datetime.now().isoformat()})

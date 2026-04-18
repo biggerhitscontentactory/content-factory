@@ -167,6 +167,7 @@
   <button class="nav-btn" onclick="showTab('setup')">⚙️ Setup</button>
   <button class="nav-btn" onclick="showTab('heygen')">🎬 HeyGen Videos</button>
   <button class="nav-btn" onclick="showTab('blog')">📝 Blog Generator</button>
+  <button class="nav-btn" onclick="showTab('manual')">✂️ Manual Post</button>
 </div>
 
 <div class="container">
@@ -717,6 +718,72 @@
       <div id="blog-products-list" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;"></div>
     </div>
 
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ MANUAL POST TAB -->
+  <div id="tab-manual" class="tab-panel">
+    <!-- Input Card -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-title">✂️ Manual Post Generator</div>
+      <p style="color:#94a3b8;font-size:13px;margin-bottom:16px;">
+        Paste a product URL from your store. The AI generates images using the actual product photo,
+        plus 5 titles and 5 descriptions per platform — ready to copy-paste directly into each network.
+      </p>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Product URL</label>
+        <input id="manual-url-input" type="text" placeholder="https://www.officialusastore.com/products/your-product-handle"
+          style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:10px 12px;color:#f1f5f9;font-size:14px;box-sizing:border-box;">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-green" onclick="runManualPost()">⚡ Generate Copy-Paste Pack</button>
+      </div>
+      <div id="manual-spinner" class="spinner-wrap" style="display:none;margin-top:14px;">
+        <div class="spinner"></div>
+        <span>Generating images and copy... takes 20–40 seconds</span>
+      </div>
+    </div>
+
+    <!-- Output -->
+    <div id="manual-output-wrap" style="display:none;">
+
+      <!-- Images Card -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="section-title">🖼️ Generated Images</div>
+        <p style="color:#94a3b8;font-size:12px;margin-bottom:12px;">Right-click any image → Save As to download.</p>
+        <div id="manual-images-grid" style="display:flex;flex-wrap:wrap;gap:12px;"></div>
+      </div>
+
+      <!-- Pinterest Card -->
+      <div class="card" style="margin-bottom:14px;" id="manual-pinterest-card">
+        <div class="section-title">📌 Pinterest — 3 Pins</div>
+        <div id="manual-pinterest-content"></div>
+      </div>
+
+      <!-- Instagram Card -->
+      <div class="card" style="margin-bottom:14px;" id="manual-instagram-card">
+        <div class="section-title">📸 Instagram</div>
+        <div id="manual-instagram-content"></div>
+      </div>
+
+      <!-- Facebook Card -->
+      <div class="card" style="margin-bottom:14px;" id="manual-facebook-card">
+        <div class="section-title">👍 Facebook</div>
+        <div id="manual-facebook-content"></div>
+      </div>
+
+      <!-- TikTok Card -->
+      <div class="card" style="margin-bottom:14px;" id="manual-tiktok-card">
+        <div class="section-title">🎵 TikTok</div>
+        <div id="manual-tiktok-content"></div>
+      </div>
+
+      <!-- YouTube Card -->
+      <div class="card" style="margin-bottom:14px;" id="manual-youtube-card">
+        <div class="section-title">▶️ YouTube</div>
+        <div id="manual-youtube-content"></div>
+      </div>
+
+    </div>
   </div>
 </div><!-- /container -->
 
@@ -1795,6 +1862,145 @@ async function runBlogGenerate(dryRun) {
     outputCard.style.display = 'block';
     outputEl.textContent = 'Error: ' + e.message;
   }
+}
+
+
+// ── Manual Post Generator ──────────────────────────────────────────────────
+async function runManualPost() {
+  const url = document.getElementById('manual-url-input').value.trim();
+  if (!url) { alert('Please enter a product URL'); return; }
+  document.getElementById('manual-spinner').style.display = 'flex';
+  document.getElementById('manual-output-wrap').style.display = 'none';
+  try {
+    const res = await fetch('/api/manual-post', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ product_url: url })
+    });
+    const data = await res.json();
+    document.getElementById('manual-spinner').style.display = 'none';
+    if (data.error) { alert('Error: ' + data.error); return; }
+    renderManualPost(data);
+  } catch(e) {
+    document.getElementById('manual-spinner').style.display = 'none';
+    alert('Request failed: ' + e.message);
+  }
+}
+
+function renderManualPost(data) {
+  // Images
+  const grid = document.getElementById('manual-images-grid');
+  grid.innerHTML = '';
+  const allImages = [];
+  if (data.images) {
+    Object.entries(data.images).forEach(([platform, paths]) => {
+      paths.forEach((p, i) => {
+        allImages.push({ platform, path: p, label: platform + (paths.length > 1 ? ' ' + (i+1) : '') });
+      });
+    });
+  }
+  allImages.forEach(({platform, path, label}) => {
+    const isVertical = platform === 'pinterest' || platform === 'tiktok';
+    const imgW = isVertical ? 140 : 200;
+    const div = document.createElement('div');
+    div.style.cssText = 'text-align:center;';
+    div.innerHTML = `
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;">${label}</div>
+      <a href="/output/${path.replace(/.*output\//, '')}" target="_blank">
+        <img src="/output/${path.replace(/.*output\//, '')}" style="width:${imgW}px;border-radius:6px;border:1px solid #334155;cursor:pointer;" title="Click to open full size">
+      </a>
+    `;
+    grid.appendChild(div);
+  });
+
+  // Platform content
+  renderPlatformSection('manual-pinterest-content', data.content?.pinterest_pins, 'pinterest', data.content?.product?.url);
+  renderPlatformSection('manual-instagram-content', [data.content?.instagram_post], 'instagram', data.content?.product?.url);
+  renderPlatformSection('manual-facebook-content', [data.content?.facebook_post], 'facebook', data.content?.product?.url);
+  renderPlatformSection('manual-tiktok-content', [data.content?.tiktok_post], 'tiktok', data.content?.product?.url);
+  renderPlatformSection('manual-youtube-content', [data.content?.youtube_post], 'youtube', data.content?.product?.url);
+
+  document.getElementById('manual-output-wrap').style.display = 'block';
+}
+
+function renderPlatformSection(containerId, items, platform, productUrl) {
+  const el = document.getElementById(containerId);
+  if (!el || !items) return;
+  let html = '';
+  (items || []).forEach((item, idx) => {
+    if (!item) return;
+    const titles = item.titles || (item.text ? [item.text] : []);
+    const descs = item.descriptions || (item.caption ? [item.caption] : (item.text ? [item.text] : []));
+    const hashtags = item.hashtags || '';
+    const link = item.link || productUrl || '';
+    const pinNum = items.length > 1 ? ` — Pin ${idx+1}` : '';
+    html += `<div style="border:1px solid #1e293b;border-radius:8px;padding:14px;margin-bottom:14px;background:#0f172a;">`;
+    if (items.length > 1) html += `<div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:10px;">Pin ${idx+1}</div>`;
+
+    // Titles
+    html += `<div style="margin-bottom:12px;">`;
+    html += `<div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📋 Titles (pick one)</div>`;
+    titles.forEach((t, ti) => {
+      html += `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;">
+        <span style="font-size:11px;color:#64748b;min-width:18px;padding-top:3px;">${ti+1}.</span>
+        <div style="flex:1;background:#1e293b;border-radius:6px;padding:8px 10px;font-size:13px;color:#f1f5f9;line-height:1.5;">${t}</div>
+        <button onclick="copyText(this,'${escapeJs(t)}')" style="background:#334155;border:none;border-radius:4px;padding:4px 8px;color:#94a3b8;cursor:pointer;font-size:11px;white-space:nowrap;">📋 Copy</button>
+      </div>`;
+    });
+    html += `</div>`;
+
+    // Descriptions
+    if (descs.length) {
+      html += `<div style="margin-bottom:12px;">`;
+      html += `<div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📝 Descriptions / Captions (pick one)</div>`;
+      descs.forEach((d, di) => {
+        html += `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;">
+          <span style="font-size:11px;color:#64748b;min-width:18px;padding-top:3px;">${di+1}.</span>
+          <div style="flex:1;background:#1e293b;border-radius:6px;padding:8px 10px;font-size:13px;color:#f1f5f9;line-height:1.5;">${d}</div>
+          <button onclick="copyText(this,'${escapeJs(d)}')" style="background:#334155;border:none;border-radius:4px;padding:4px 8px;color:#94a3b8;cursor:pointer;font-size:11px;white-space:nowrap;">📋 Copy</button>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    // Hashtags
+    if (hashtags) {
+      html += `<div style="margin-bottom:12px;">
+        <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;"># Hashtags</div>
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div style="flex:1;background:#1e293b;border-radius:6px;padding:8px 10px;font-size:12px;color:#60a5fa;line-height:1.6;">${hashtags}</div>
+          <button onclick="copyText(this,'${escapeJs(hashtags)}')" style="background:#334155;border:none;border-radius:4px;padding:4px 8px;color:#94a3b8;cursor:pointer;font-size:11px;white-space:nowrap;">📋 Copy</button>
+        </div>
+      </div>`;
+    }
+
+    // Link
+    if (link) {
+      html += `<div>
+        <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">🔗 Product Link</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="flex:1;background:#1e293b;border-radius:6px;padding:8px 10px;font-size:12px;color:#34d399;">${link}</div>
+          <button onclick="copyText(this,'${escapeJs(link)}')" style="background:#334155;border:none;border-radius:4px;padding:4px 8px;color:#94a3b8;cursor:pointer;font-size:11px;white-space:nowrap;">📋 Copy</button>
+        </div>
+      </div>`;
+    }
+
+    html += `</div>`;
+  });
+  el.innerHTML = html;
+}
+
+function escapeJs(str) {
+  return (str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, ' ');
+}
+
+function copyText(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    btn.style.color = '#34d399';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = '#94a3b8'; }, 2000);
+  });
 }
 
 </script>

@@ -151,6 +151,59 @@ def download_image(url: str):
         return None
 
 
+
+def build_product_composite(product: dict, size: tuple, bg_style: str = "gradient") -> Image.Image:
+    """
+    Build a platform image using the actual product photo on a patriotic background.
+    - Downloads the product's primary_image from Shopify CDN
+    - Places it centered on a red/white/navy gradient background
+    - Returns a PIL Image ready for overlay
+    """
+    w, h = size
+    # ── Background ────────────────────────────────────────────────────────────
+    bg = Image.new("RGB", (w, h))
+    draw_bg = ImageDraw.Draw(bg)
+    # Patriotic gradient: deep navy top → red bottom
+    navy = (13, 43, 100)
+    red  = (178, 34, 34)
+    for y in range(h):
+        t = y / h
+        r = int(navy[0] + (red[0] - navy[0]) * t)
+        g = int(navy[1] + (red[1] - navy[1]) * t)
+        b = int(navy[2] + (red[2] - navy[2]) * t)
+        draw_bg.line([(0, y), (w, y)], fill=(r, g, b))
+    # ── Stars pattern (subtle) ────────────────────────────────────────────────
+    import random as _rnd
+    _rnd.seed(42)
+    for _ in range(60):
+        sx = _rnd.randint(0, w)
+        sy = _rnd.randint(0, int(h * 0.6))
+        sr = _rnd.randint(1, 3)
+        draw_bg.ellipse([sx-sr, sy-sr, sx+sr, sy+sr], fill=(255, 255, 255, 80))
+    # ── Product image ─────────────────────────────────────────────────────────
+    primary = product.get("primary_image", "") or (product.get("images", [""])[0] if product.get("images") else "")
+    prod_img = None
+    if primary:
+        prod_img = download_image(primary)
+    if prod_img:
+        # Fit product image into center 70% of canvas
+        max_w = int(w * 0.70)
+        max_h = int(h * 0.60)
+        prod_img.thumbnail((max_w, max_h), Image.LANCZOS)
+        # Center horizontally, place in middle 60% vertically
+        px = (w - prod_img.width) // 2
+        py = int(h * 0.20) + (max_h - prod_img.height) // 2
+        # Add subtle drop shadow
+        shadow = Image.new("RGBA", (prod_img.width + 20, prod_img.height + 20), (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow)
+        shadow_draw.rectangle([10, 10, prod_img.width + 10, prod_img.height + 10], fill=(0, 0, 0, 80))
+        bg.paste(shadow.convert("RGB"), (px - 10, py - 10))
+        if prod_img.mode == "RGBA":
+            bg.paste(prod_img, (px, py), prod_img)
+        else:
+            bg.paste(prod_img, (px, py))
+    return bg
+
 def generate_dalle_image(prompt: str, size: str = "1024x1792"):
     try:
         client = get_openai_client()
@@ -545,3 +598,57 @@ def generate_ecommerce_images(content_pack: dict, product_handle: str,
 
 def generate_ai_channel_images(content_pack: dict, topic_slug: str, output_dir: str = None) -> dict:
     return {}
+
+
+def generate_manual_post_images(product: dict, out_dir: str) -> dict:
+    """
+    Generate copy-paste-ready images for the Manual Post Generator.
+    Uses the actual product photo as the base image.
+    Returns dict with paths for pinterest (3 pins), instagram, facebook, tiktok, youtube.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    results = {}
+    title = product.get("title", "Product")
+
+    # Pinterest — 3 pins, each with a slightly different crop/angle
+    pin_paths = []
+    for i in range(3):
+        img = build_product_composite(product, PLATFORM_SPECS["pinterest"]["size"])
+        if img:
+            img = add_pinterest_overlay(img, title[:80], subtitle="", price="")
+            path = os.path.join(out_dir, f"manual_pin_{i+1}.jpg")
+            img.save(path, "JPEG", quality=92)
+            pin_paths.append(path)
+    results["pinterest"] = pin_paths
+
+    # Instagram — square
+    ig_img = build_product_composite(product, PLATFORM_SPECS["instagram"]["size"])
+    if ig_img:
+        ig_img = add_instagram_overlay(ig_img, headline=title[:60], price="")
+        ig_path = os.path.join(out_dir, "manual_instagram.jpg")
+        ig_img.save(ig_path, "JPEG", quality=92)
+        results["instagram"] = [ig_path]
+
+        # Facebook — same as Instagram
+        fb_img = smart_crop(ig_img.copy(), *PLATFORM_SPECS["facebook"]["size"])
+        fb_path = os.path.join(out_dir, "manual_facebook.jpg")
+        fb_img.save(fb_path, "JPEG", quality=92)
+        results["facebook"] = [fb_path]
+
+    # TikTok — vertical (same as Pinterest but with TikTok overlay)
+    tk_img = build_product_composite(product, (1080, 1920))
+    if tk_img:
+        tk_img = add_pinterest_overlay(tk_img, title[:80], subtitle="Shop the link in bio", price="")
+        tk_path = os.path.join(out_dir, "manual_tiktok.jpg")
+        tk_img.save(tk_path, "JPEG", quality=92)
+        results["tiktok"] = [tk_path]
+
+    # YouTube thumbnail — wide
+    yt_img = build_product_composite(product, (1280, 720))
+    if yt_img:
+        yt_img = add_instagram_overlay(yt_img, headline=title[:60], price="")
+        yt_path = os.path.join(out_dir, "manual_youtube.jpg")
+        yt_img.save(yt_path, "JPEG", quality=92)
+        results["youtube"] = [yt_path]
+
+    return results
