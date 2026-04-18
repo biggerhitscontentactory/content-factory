@@ -960,10 +960,17 @@ def api_manual_post():
     try:
         raw = get_product_by_url(product_url)
         if not raw:
-            return jsonify({"error": f"Could not fetch product from URL: {product_url}"}), 404
+            return jsonify({
+                "error": (
+                    "Could not fetch product data from that URL. "
+                    "Make sure it is a valid OfficialUSAStore.com product page URL "
+                    "(e.g. https://www.officialusastore.com/products/product-handle). "
+                    "URLs with /collections/ in the path are also supported."
+                )
+            }), 404
         product = extract_product_data(raw)
         if not product:
-            return jsonify({"error": "Could not parse product data"}), 500
+            return jsonify({"error": "Could not parse product data from Shopify response"}), 500
 
         # Generate content pack
         content_pack = generate_ecommerce_content_pack(product)

@@ -62,20 +62,64 @@ def get_all_products_public():
 def get_product_by_url(product_url):
     """
     Fetch a single product by its Shopify URL.
-    Appends .json to the URL to get structured data.
+    Handles:
+      - URLs with query strings (?variant=xxx) or fragments (#)
+      - /collections/xxx/products/yyy paths
+      - HTML responses (password pages, 404 pages that return 200)
+      - Redirects
     """
-    if not product_url.endswith(".json"):
-        json_url = product_url.rstrip("/") + ".json"
-    else:
-        json_url = product_url
+    from urllib.parse import urlparse, urlunparse
+
+    # Strip query string and fragment before appending .json
+    parsed = urlparse(product_url)
+    clean_path = parsed.path.rstrip("/")
+
+    # If URL contains /collections/.../products/handle, extract just /products/handle
+    import re as _re
+    m = _re.search(r'(/products/[^/?#]+)', clean_path)
+    if m:
+        clean_path = m.group(1)
+
+    # Build the .json URL using the original scheme + host
+    if not clean_path.endswith(".json"):
+        clean_path = clean_path + ".json"
+
+    json_url = urlunparse((parsed.scheme, parsed.netloc, clean_path, '', '', ''))
+    print(f"[Shopify] Fetching product JSON: {json_url}")
 
     try:
-        resp = requests.get(json_url, timeout=15)
+        resp = requests.get(json_url, timeout=15, allow_redirects=True)
+
+        # Check content type — if it's HTML, Shopify returned an error page
+        content_type = resp.headers.get("Content-Type", "")
+        if "text/html" in content_type:
+            print(f"[Shopify] Got HTML response (not JSON) for {json_url} — status {resp.status_code}")
+            return {}
+
+        if resp.status_code == 404:
+            print(f"[Shopify] 404 for {json_url}")
+            return {}
+
         resp.raise_for_status()
+
+        # Guard against HTML slipping through without Content-Type header
+        text = resp.text.strip()
+        if text.startswith("<"):
+            print(f"[Shopify] Response looks like HTML, not JSON: {text[:80]}")
+            return {}
+
         data = resp.json()
-        return data.get("product", {})
+        product = data.get("product", {})
+        if not product:
+            print(f"[Shopify] Empty product in JSON response for {json_url}")
+        return product
+
+    except ValueError as e:
+        # json decode error
+        print(f"[Shopify] JSON decode error for {json_url}: {e}")
+        return {}
     except requests.RequestException as e:
-        print(f"[Shopify] Error fetching product from URL {product_url}: {e}")
+        print(f"[Shopify] Request error fetching {json_url}: {e}")
         return {}
 
 
