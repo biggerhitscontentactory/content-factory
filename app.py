@@ -1009,13 +1009,7 @@ def api_manual_post():
 @app.route("/api/filler-post", methods=["POST"])
 @login_required
 def api_filler_post():
-    """Generate engagement filler content (no product links) for a theme keyword."""
-    import sys, os
-    MOD_DIR = os.path.join(os.path.dirname(__file__), "modules")
-    if MOD_DIR not in sys.path:
-        sys.path.insert(0, MOD_DIR)
-    from content_filler import generate_filler_content, generate_filler_images
-
+    """Start async filler content generation and return job_id immediately."""
     data = request.get_json() or {}
     theme = (data.get("theme") or "").strip()
     if not theme:
@@ -1023,37 +1017,54 @@ def api_filler_post():
     if len(theme) > 120:
         return jsonify({"error": "theme is too long (max 120 chars)"}), 400
 
-    try:
-        # Generate GPT content pack
-        content = generate_filler_content(theme)
-        if "error" in content:
-            return jsonify({"error": content["error"]}), 500
+    job_id = str(uuid.uuid4())[:8]
+    _write_job(job_id, {"status": "running", "output": "Starting...", "result": None, "error": None})
 
-        # Generate images
-        import re
-        safe_theme = re.sub(r'[^a-z0-9]+', '_', theme.lower()).strip('_')[:40]
-        out_dir = os.path.join(
-            os.path.dirname(__file__), "output", "filler", safe_theme
-        )
-        image_paths = generate_filler_images(theme, content, out_dir)
+    def _run_filler(jid, theme):
+        try:
+            import re as _re
+            _update_job(jid, {"output": "Generating SEO content with GPT..."})
+            from content_filler import generate_filler_content, generate_filler_images
+            content = generate_filler_content(theme)
+            if "error" in content:
+                _update_job(jid, {"status": "error", "error": content["error"]})
+                return
+            _update_job(jid, {"output": "Generating images with DALL-E (this takes ~45 seconds)..."})
+            safe_theme = _re.sub(r'[^a-z0-9]+', '_', theme.lower()).strip('_')[:40]
+            out_dir = os.path.join(BASE_DIR, "output", "filler", safe_theme)
+            image_paths = generate_filler_images(theme, content, out_dir)
+            base = os.path.join(BASE_DIR, "output")
+            rel_images = {}
+            for platform, paths in image_paths.items():
+                rel_images[platform] = [os.path.relpath(p, base) for p in paths]
+            _update_job(jid, {
+                "status": "done",
+                "output": "Done!",
+                "result": {"theme": theme, "content": content, "images": rel_images}
+            })
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            _update_job(jid, {"status": "error", "error": str(exc)})
 
-        # Convert absolute paths to relative web paths
-        base = os.path.join(os.path.dirname(__file__), "output")
-        rel_images = {}
-        for platform, paths in image_paths.items():
-            rel_images[platform] = [
-                os.path.relpath(p, base) for p in paths
-            ]
+    threading.Thread(target=_run_filler, args=(job_id, theme), daemon=True).start()
+    return jsonify({"job_id": job_id, "status": "running"})
 
-        return jsonify({
-            "theme": theme,
-            "content": content,
-            "images": rel_images,
-        })
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/filler-post/status/<job_id>")
+@login_required
+def api_filler_status(job_id):
+    """Poll filler job status."""
+    job = _read_job(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify({
+        "job_id": job_id,
+        "status": job.get("status", "unknown"),
+        "output": job.get("output", ""),
+        "result": job.get("result"),
+        "error": job.get("error"),
+    })
 
 
 @app.route("/health")

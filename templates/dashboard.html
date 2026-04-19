@@ -2064,15 +2064,15 @@ async function runFillerPost() {
   if (!theme) { alert('Please enter a theme or topic'); return; }
   document.getElementById('filler-spinner').style.display = 'flex';
   document.getElementById('filler-spinner-text').textContent =
-    `Generating lifestyle images for "${theme}"... takes 30–60 seconds`;
+    `Starting generation for "${theme}"...`;
   document.getElementById('filler-output-wrap').style.display = 'none';
   try {
+    // Step 1: Start the job (returns immediately)
     const res = await fetch('/api/filler-post', {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ theme })
     });
-    // Handle session expiry or non-JSON response
     if (res.status === 401) { window.location.href = '/login'; return; }
     const ct = res.headers.get('content-type') || '';
     if (!ct.includes('application/json')) {
@@ -2080,11 +2080,41 @@ async function runFillerPost() {
       alert('Session expired or server error. Please refresh the page and log in again.');
       return;
     }
-    const data = await res.json();
+    const startData = await res.json();
+    if (startData.error === 'session_expired') { window.location.href = '/login'; return; }
+    if (startData.error) {
+      document.getElementById('filler-spinner').style.display = 'none';
+      alert('Error: ' + startData.error); return;
+    }
+    const jobId = startData.job_id;
+    // Step 2: Poll for completion
+    let elapsed = 0;
+    const maxWait = 180; // 3 minutes max
+    while (elapsed < maxWait) {
+      await new Promise(r => setTimeout(r, 3000));
+      elapsed += 3;
+      const pollRes = await fetch(`/api/filler-post/status/${jobId}`, { headers: authHeaders() });
+      if (pollRes.status === 401) { window.location.href = '/login'; return; }
+      const poll = await pollRes.json();
+      if (poll.error === 'session_expired') { window.location.href = '/login'; return; }
+      // Update spinner text with progress
+      if (poll.output) {
+        document.getElementById('filler-spinner-text').textContent = poll.output;
+      }
+      if (poll.status === 'done') {
+        document.getElementById('filler-spinner').style.display = 'none';
+        renderFillerPost(poll.result);
+        return;
+      }
+      if (poll.status === 'error') {
+        document.getElementById('filler-spinner').style.display = 'none';
+        alert('Error: ' + (poll.error || 'Unknown error'));
+        return;
+      }
+    }
+    // Timed out
     document.getElementById('filler-spinner').style.display = 'none';
-    if (data.error === 'session_expired') { window.location.href = '/login'; return; }
-    if (data.error) { alert('Error: ' + data.error); return; }
-    renderFillerPost(data);
+    alert('Generation is taking longer than expected. Please try again.');
   } catch(e) {
     document.getElementById('filler-spinner').style.display = 'none';
     alert('Request failed: ' + e.message + '. Please refresh the page and try again.');
