@@ -168,6 +168,7 @@
   <button class="nav-btn" onclick="showTab('heygen')">🎬 HeyGen Videos</button>
   <button class="nav-btn" onclick="showTab('blog')">📝 Blog Generator</button>
   <button class="nav-btn" onclick="showTab('manual')">✂️ Manual Post</button>
+  <button class="nav-btn" onclick="showTab('filler')">🎨 Content Filler</button>
 </div>
 
 <div class="container">
@@ -785,6 +786,105 @@
 
     </div>
   </div>
+
+  <!-- ── CONTENT FILLER TAB ── -->
+  <div id="tab-filler" class="tab-panel">
+
+    <!-- Input Card -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-title">🎨 Content Filler Generator</div>
+      <p style="color:#94a3b8;font-size:13px;margin-bottom:16px;">
+        Enter a theme or topic (e.g. <em>"4th of July picnic"</em>, <em>"Washington DC"</em>, <em>"Arches National Park"</em>).
+        The AI generates unique lifestyle images for every platform plus 5 title options, 4 description options,
+        and hashtags — <strong style="color:#f59e0b;">no product links</strong> — ready to copy-paste for manual posting.
+        Use these to keep your audience engaged between product posts.
+      </p>
+
+      <!-- Theme suggestions -->
+      <div style="margin-bottom:14px;">
+        <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Quick Theme Ideas</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <button onclick="setFillerTheme('4th of July picnic')" style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 12px;color:#94a3b8;font-size:12px;cursor:pointer;">🧺 4th of July picnic</button>
+          <button onclick="setFillerTheme('Washington DC monuments')" style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 12px;color:#94a3b8;font-size:12px;cursor:pointer;">🏛️ Washington DC</button>
+          <button onclick="setFillerTheme('Arches National Park')" style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 12px;color:#94a3b8;font-size:12px;cursor:pointer;">🏜️ Arches National Park</button>
+          <button onclick="setFillerTheme('American flag sunset')" style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 12px;color:#94a3b8;font-size:12px;cursor:pointer;">🌅 American flag sunset</button>
+          <button onclick="setFillerTheme('Memorial Day tribute')" style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 12px;color:#94a3b8;font-size:12px;cursor:pointer;">🎖️ Memorial Day</button>
+          <button onclick="setFillerTheme('backyard BBQ America')" style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 12px;color:#94a3b8;font-size:12px;cursor:pointer;">🔥 Backyard BBQ</button>
+          <button onclick="setFillerTheme('Yellowstone National Park')" style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 12px;color:#94a3b8;font-size:12px;cursor:pointer;">🦬 Yellowstone</button>
+          <button onclick="setFillerTheme('Veterans Day honor')" style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 12px;color:#94a3b8;font-size:12px;cursor:pointer;">🇺🇸 Veterans Day</button>
+          <button onclick="setFillerTheme('American small town main street')" style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 12px;color:#94a3b8;font-size:12px;cursor:pointer;">🏘️ Small Town America</button>
+          <button onclick="setFillerTheme('fireworks over the Capitol')" style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 12px;color:#94a3b8;font-size:12px;cursor:pointer;">🎆 Fireworks Capitol</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Theme / Topic</label>
+        <input id="filler-theme-input" type="text" placeholder="e.g. 4th of July picnic, Washington DC, Arches National Park..."
+          style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:10px 12px;color:#f1f5f9;font-size:14px;box-sizing:border-box;">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-green" onclick="runFillerPost()">🎨 Generate Filler Content</button>
+      </div>
+      <div id="filler-spinner" class="spinner-wrap" style="display:none;margin-top:14px;">
+        <div class="spinner"></div>
+        <span id="filler-spinner-text">Generating lifestyle images and copy... takes 30–60 seconds</span>
+      </div>
+    </div>
+
+    <!-- Output -->
+    <div id="filler-output-wrap" style="display:none;">
+
+      <!-- Theme header -->
+      <div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,#0f172a,#1e293b);border:1px solid #334155;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="font-size:28px;">🎨</span>
+          <div>
+            <div style="font-size:18px;font-weight:700;color:#f1f5f9;" id="filler-theme-display"></div>
+            <div style="font-size:12px;color:#64748b;margin-top:2px;">Engagement content — no product links</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Images Card -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="section-title">🖼️ Generated Images</div>
+        <p style="color:#94a3b8;font-size:12px;margin-bottom:12px;">Right-click any image → Save As to download. Click to open full size.</p>
+        <div id="filler-images-grid" style="display:flex;flex-wrap:wrap;gap:12px;"></div>
+      </div>
+
+      <!-- Pinterest Card -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="section-title">📌 Pinterest — 3 Pins</div>
+        <div id="filler-pinterest-content"></div>
+      </div>
+
+      <!-- Instagram Card -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="section-title">📸 Instagram</div>
+        <div id="filler-instagram-content"></div>
+      </div>
+
+      <!-- Facebook Card -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="section-title">👍 Facebook</div>
+        <div id="filler-facebook-content"></div>
+      </div>
+
+      <!-- TikTok Card -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="section-title">🎵 TikTok</div>
+        <div id="filler-tiktok-content"></div>
+      </div>
+
+      <!-- YouTube Card -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="section-title">▶️ YouTube</div>
+        <div id="filler-youtube-content"></div>
+      </div>
+
+    </div>
+  </div>
+
 </div><!-- /container -->
 
 <script>
@@ -1953,6 +2053,77 @@ async function runBlogGenerate(dryRun) {
   }
 }
 
+
+// ── Content Filler Generator ────────────────────────────────────────────────
+function setFillerTheme(theme) {
+  document.getElementById('filler-theme-input').value = theme;
+}
+
+async function runFillerPost() {
+  const theme = document.getElementById('filler-theme-input').value.trim();
+  if (!theme) { alert('Please enter a theme or topic'); return; }
+  document.getElementById('filler-spinner').style.display = 'flex';
+  document.getElementById('filler-spinner-text').textContent =
+    `Generating lifestyle images for "${theme}"... takes 30–60 seconds`;
+  document.getElementById('filler-output-wrap').style.display = 'none';
+  try {
+    const res = await fetch('/api/filler-post', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ theme })
+    });
+    const data = await res.json();
+    document.getElementById('filler-spinner').style.display = 'none';
+    if (data.error) { alert('Error: ' + data.error); return; }
+    renderFillerPost(data);
+  } catch(e) {
+    document.getElementById('filler-spinner').style.display = 'none';
+    alert('Request failed: ' + e.message);
+  }
+}
+
+function renderFillerPost(data) {
+  // Theme display
+  document.getElementById('filler-theme-display').textContent = data.theme || '';
+
+  // Images grid
+  const grid = document.getElementById('filler-images-grid');
+  grid.innerHTML = '';
+  const allImages = [];
+  if (data.images) {
+    const order = ['pinterest','instagram','facebook','tiktok','youtube'];
+    order.forEach(plat => {
+      const paths = data.images[plat] || [];
+      paths.forEach((p, i) => {
+        allImages.push({ platform: plat, path: p, label: plat + (paths.length > 1 ? ' ' + (i+1) : '') });
+      });
+    });
+  }
+  allImages.forEach(({platform, path, label}) => {
+    const isVertical = platform === 'pinterest' || platform === 'tiktok';
+    const imgW = isVertical ? 140 : 200;
+    const div = document.createElement('div');
+    div.style.cssText = 'text-align:center;';
+    div.innerHTML = `
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;">${label}<\/div>
+      <a href="/output/${path.replace(/.*output\//, '')}" target="_blank">
+        <img src="/output/${path.replace(/.*output\//, '')}" style="width:${imgW}px;border-radius:6px;border:1px solid #334155;cursor:pointer;" title="Click to open full size">
+      <\/a>
+    `;
+    grid.appendChild(div);
+  });
+
+  // Platform content — reuse renderPlatformSection
+  const c = data.content || {};
+  renderPlatformSection('filler-pinterest-content', c.pinterest_pins, 'pinterest', null);
+  renderPlatformSection('filler-instagram-content', [c.instagram_post], 'instagram', null);
+  renderPlatformSection('filler-facebook-content', [c.facebook_post], 'facebook', null);
+  renderPlatformSection('filler-tiktok-content', [c.tiktok_post], 'tiktok', null);
+  renderPlatformSection('filler-youtube-content', [c.youtube_post], 'youtube', null);
+
+  document.getElementById('filler-output-wrap').style.display = 'block';
+  document.getElementById('filler-output-wrap').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
 
 // ── Manual Post Generator ──────────────────────────────────────────────────
 async function runManualPost() {

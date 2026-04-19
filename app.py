@@ -1006,6 +1006,56 @@ def api_manual_post():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/filler-post", methods=["POST"])
+@login_required
+def api_filler_post():
+    """Generate engagement filler content (no product links) for a theme keyword."""
+    import sys, os
+    MOD_DIR = os.path.join(os.path.dirname(__file__), "modules")
+    if MOD_DIR not in sys.path:
+        sys.path.insert(0, MOD_DIR)
+    from content_filler import generate_filler_content, generate_filler_images
+
+    data = request.get_json() or {}
+    theme = (data.get("theme") or "").strip()
+    if not theme:
+        return jsonify({"error": "theme is required"}), 400
+    if len(theme) > 120:
+        return jsonify({"error": "theme is too long (max 120 chars)"}), 400
+
+    try:
+        # Generate GPT content pack
+        content = generate_filler_content(theme)
+        if "error" in content:
+            return jsonify({"error": content["error"]}), 500
+
+        # Generate images
+        import re
+        safe_theme = re.sub(r'[^a-z0-9]+', '_', theme.lower()).strip('_')[:40]
+        out_dir = os.path.join(
+            os.path.dirname(__file__), "output", "filler", safe_theme
+        )
+        image_paths = generate_filler_images(theme, content, out_dir)
+
+        # Convert absolute paths to relative web paths
+        base = os.path.join(os.path.dirname(__file__), "output")
+        rel_images = {}
+        for platform, paths in image_paths.items():
+            rel_images[platform] = [
+                os.path.relpath(p, base) for p in paths
+            ]
+
+        return jsonify({
+            "theme": theme,
+            "content": content,
+            "images": rel_images,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "time": datetime.now().isoformat()})
