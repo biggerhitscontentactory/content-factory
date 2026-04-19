@@ -2141,24 +2141,49 @@ function renderFillerPost(data) {
   allImages.forEach(({platform, path, label}) => {
     const isVertical = platform === 'pinterest' || platform === 'tiktok';
     const imgW = isVertical ? 140 : 200;
+    // path is relative to output dir e.g. "filler/theme/file.jpg"
+    const imgUrl = '/output/' + path.replace(/^\/.*?output\//, '').replace(/^output\//, '');
     const div = document.createElement('div');
     div.style.cssText = 'text-align:center;';
     div.innerHTML = `
       <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;">${label}<\/div>
-      <a href="/output/${path.replace(/.*output\//, '')}" target="_blank">
-        <img src="/output/${path.replace(/.*output\//, '')}" style="width:${imgW}px;border-radius:6px;border:1px solid #334155;cursor:pointer;" title="Click to open full size">
+      <a href="${imgUrl}" target="_blank">
+        <img src="${imgUrl}" style="width:${imgW}px;border-radius:6px;border:1px solid #334155;cursor:pointer;" title="Click to open full size">
       <\/a>
     `;
     grid.appendChild(div);
   });
 
-  // Platform content — reuse renderPlatformSection
+  // Platform content — normalize structure for renderPlatformSection
   const c = data.content || {};
+
+  // Pinterest pins already have titles + descriptions
   renderPlatformSection('filler-pinterest-content', c.pinterest_pins, 'pinterest', null);
-  renderPlatformSection('filler-instagram-content', [c.instagram_post], 'instagram', null);
-  renderPlatformSection('filler-facebook-content', [c.facebook_post], 'facebook', null);
-  renderPlatformSection('filler-tiktok-content', [c.tiktok_post], 'tiktok', null);
-  renderPlatformSection('filler-youtube-content', [c.youtube_post], 'youtube', null);
+
+  // Instagram/Facebook/TikTok use 'titles' as captions — map to descriptions so they show
+  function fillerItem(post) {
+    if (!post) return null;
+    return {
+      titles: [],                          // no separate title row
+      descriptions: post.titles || [],     // show the 5 caption options as descriptions
+      hashtags: post.hashtags || ''
+    };
+  }
+
+  // YouTube has both titles and descriptions
+  function fillerYT(post) {
+    if (!post) return null;
+    return {
+      titles: post.titles || [],
+      descriptions: post.descriptions || [],
+      hashtags: post.hashtags || ''
+    };
+  }
+
+  renderPlatformSection('filler-instagram-content', [fillerItem(c.instagram_post)], 'instagram', null);
+  renderPlatformSection('filler-facebook-content',  [fillerItem(c.facebook_post)],  'facebook',  null);
+  renderPlatformSection('filler-tiktok-content',    [fillerItem(c.tiktok_post)],    'tiktok',    null);
+  renderPlatformSection('filler-youtube-content',   [fillerYT(c.youtube_post)],     'youtube',   null);
 
   document.getElementById('filler-output-wrap').style.display = 'block';
   document.getElementById('filler-output-wrap').scrollIntoView({behavior: 'smooth', block: 'start'});
