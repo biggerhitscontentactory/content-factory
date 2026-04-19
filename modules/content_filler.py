@@ -105,41 +105,41 @@ Return ONLY valid JSON in this exact structure:
       "titles": ["title1", "title2", "title3", "title4", "title5"],
       "descriptions": ["desc1", "desc2", "desc3", "desc4"],
       "hashtags": "#tag1 #tag2 #tag3 #tag4 #tag5 #tag6 #tag7 #tag8 #tag9 #tag10",
-      "image_prompt": "Detailed DALL-E 3 prompt for a stunning vertical Pinterest lifestyle image about this theme. Photorealistic, vibrant, patriotic color palette where natural. NO text in image."
+      "image_prompt": "Candid DSLR lifestyle photograph for Pinterest (vertical 2:3). Real people, real setting, natural light. Specific camera details like 'shot on Canon EOS R5, 35mm f/1.8, golden hour'. NOT illustrated, NOT AI art. NO text in image."
     }},
     {{
       "titles": ["title1", "title2", "title3", "title4", "title5"],
       "descriptions": ["desc1", "desc2", "desc3", "desc4"],
       "hashtags": "#tag1 #tag2 ...",
-      "image_prompt": "Different scene/angle DALL-E 3 prompt for Pinterest pin 2."
+      "image_prompt": "Different candid DSLR lifestyle photo for Pinterest pin 2 — completely different scene, different people, different time of day. Real photography style. NO text."
     }},
     {{
       "titles": ["title1", "title2", "title3", "title4", "title5"],
       "descriptions": ["desc1", "desc2", "desc3", "desc4"],
       "hashtags": "#tag1 #tag2 ...",
-      "image_prompt": "Different scene/angle DALL-E 3 prompt for Pinterest pin 3."
+      "image_prompt": "Different candid DSLR lifestyle photo for Pinterest pin 3 — unique angle, unique moment. Real photography style. NO text."
     }}
   ],
   "instagram_post": {{
     "titles": ["caption1", "caption2", "caption3", "caption4", "caption5"],
     "hashtags": "#tag1 #tag2 #tag3 ... (25-30 tags)",
-    "image_prompt": "DALL-E 3 prompt for a square Instagram lifestyle image. Bold, bright, scroll-stopping. NO text in image."
+    "image_prompt": "Candid DSLR Instagram photo (square 1:1). Real moment, natural light, shallow depth of field. Shot on Sony A7IV, 50mm lens. Bright, scroll-stopping but 100% photographic — NOT illustrated. NO text."
   }},
   "facebook_post": {{
     "titles": ["post1", "post2", "post3", "post4", "post5"],
     "hashtags": "#tag1 #tag2 #tag3 #tag4 #tag5",
-    "image_prompt": "DALL-E 3 prompt for a wide Facebook landscape lifestyle image. Warm, shareable, community feel. NO text in image."
+    "image_prompt": "Wide-angle DSLR lifestyle photo for Facebook (landscape 16:9). Warm golden hour light, real people, community/family feel. Shot on Canon 24mm f/2.8. 100% photographic, NOT illustrated. NO text."
   }},
   "tiktok_post": {{
     "titles": ["hook1", "hook2", "hook3", "hook4", "hook5"],
     "hashtags": "#tag1 #tag2 ... #fyp #foryou (15-20 tags)",
-    "image_prompt": "DALL-E 3 prompt for a tall TikTok cover image. Dynamic, youthful, eye-catching. NO text in image."
+    "image_prompt": "Vertical DSLR lifestyle photo for TikTok cover (9:16). Dynamic, youthful, real candid moment. Shot on iPhone 15 Pro or Sony A7 with 35mm. High energy, natural colors, NOT illustrated. NO text."
   }},
   "youtube_post": {{
     "titles": ["title1", "title2", "title3", "title4", "title5"],
     "descriptions": ["Full YouTube description option 1 (2-3 sentences, SEO rich)", "Full YouTube description option 2", "Full YouTube description option 3"],
     "hashtags": "#tag1 #tag2 #tag3 #tag4 #tag5",
-    "image_prompt": "DALL-E 3 prompt for a YouTube thumbnail. High contrast, dramatic, cinematic wide shot. NO text in image."
+    "image_prompt": "Cinematic DSLR wide-angle photo for YouTube thumbnail (16:9). Dramatic natural lighting, real location, high contrast but photographic. Shot on RED camera or Canon C70. NOT illustrated, NOT AI art. NO text."
   }}
 }}
 
@@ -152,11 +152,15 @@ Requirements for titles/captions:
 - YouTube titles: 8-12 words, curiosity gap, searchable
 
 Requirements for image prompts:
-- Photorealistic lifestyle photography style
-- Vibrant, high-contrast, optimized for social media
-- Patriotic color palette (red, white, blue, gold) where it fits naturally
-- Each Pinterest pin must be a DIFFERENT scene/angle
-- NO text, NO words, NO watermarks in the generated image"""
+- MUST be shot in the style of a professional DSLR photograph — NOT illustrated, NOT painted, NOT AI-looking
+- Use specific camera language: "shot on Canon EOS R5", "35mm lens", "f/1.8 bokeh", "golden hour natural light", "shallow depth of field"
+- Real people, real places, real moments — candid lifestyle photography
+- Skin tones, textures, fabrics, grass, sky must look 100% photographic and natural
+- No surreal colors, no painterly strokes, no digital art look
+- Patriotic color palette (red, white, blue, gold) through props/clothing/environment — not color grading
+- Each Pinterest pin must be a DIFFERENT scene/angle with different people/setting
+- NO text, NO words, NO watermarks, NO logos in the generated image
+- Examples of good prompts: Candid DSLR photo of a family at a 4th of July picnic, American flag bunting in background, golden hour light, shallow depth of field, Canon 35mm"""
 
     try:
         resp = client.chat.completions.create(
@@ -292,13 +296,14 @@ def generate_filler_images(theme: str, content: dict, out_dir: str) -> dict:
     pins = content.get("pinterest_pins", [])
     for i, pin in enumerate(pins[:3]):
         prompt = pin.get("image_prompt", f"Stunning patriotic lifestyle scene: {theme}. Vertical portrait, vibrant, photorealistic. No text.")
-        # Enhance prompt for Pinterest
+        # Enforce photorealistic photography style for Pinterest
         full_prompt = (
             f"{prompt} "
-            f"Vertical 2:3 portrait orientation. Photorealistic lifestyle photography. "
-            f"Vibrant patriotic colors (red, white, navy blue, gold) where natural. "
-            f"Bright, high-contrast, scroll-stopping Pinterest aesthetic. "
-            f"NO text, NO words, NO watermarks in the image."
+            f"STYLE: Real DSLR photograph, NOT digital art, NOT illustration, NOT AI-generated look. "
+            f"Shot on Canon EOS R5 with 35mm f/1.8 lens. Natural light, shallow depth of field, "
+            f"realistic skin tones, genuine textures. Candid lifestyle photography. "
+            f"Vertical 2:3 portrait orientation. "
+            f"NO text, NO words, NO watermarks, NO logos."
         )
         img = _generate_dalle_image(full_prompt, dalle_size="1024x1792")
         if img is None:
@@ -321,8 +326,9 @@ def generate_filler_images(theme: str, content: dict, out_dir: str) -> dict:
     ig_prompt = ig.get("image_prompt", f"Beautiful square lifestyle photo: {theme}. Bold, bright, Instagram-worthy. No text.")
     full_ig_prompt = (
         f"{ig_prompt} "
-        f"Square 1:1 format. Photorealistic lifestyle photography. "
-        f"Vibrant, high-contrast, Instagram scroll-stopping. "
+        f"STYLE: Real DSLR photograph, NOT digital art, NOT illustration. "
+        f"Shot on Sony A7IV 50mm f/1.4. Natural light, bokeh background, realistic colors. "
+        f"Square 1:1 format. Candid lifestyle photography, scroll-stopping. "
         f"NO text, NO words, NO watermarks."
     )
     ig_img = _generate_dalle_image(full_ig_prompt, dalle_size="1024x1024")
@@ -341,8 +347,9 @@ def generate_filler_images(theme: str, content: dict, out_dir: str) -> dict:
     fb_prompt = fb.get("image_prompt", f"Wide landscape lifestyle photo: {theme}. Warm, shareable, community feel. No text.")
     full_fb_prompt = (
         f"{fb_prompt} "
-        f"Wide 16:9 landscape format. Photorealistic lifestyle photography. "
-        f"Warm, inviting, shareable Facebook aesthetic. "
+        f"STYLE: Real DSLR photograph, NOT digital art, NOT illustration. "
+        f"Shot on Canon 24-70mm f/2.8. Golden hour warm light, real people, natural setting. "
+        f"Wide 16:9 landscape format. Warm, inviting, community feel. "
         f"NO text, NO words, NO watermarks."
     )
     fb_img = _generate_dalle_image(full_fb_prompt, dalle_size="1792x1024")
@@ -361,8 +368,9 @@ def generate_filler_images(theme: str, content: dict, out_dir: str) -> dict:
     tt_prompt = tt.get("image_prompt", f"Dynamic vertical lifestyle image: {theme}. Eye-catching, youthful. No text.")
     full_tt_prompt = (
         f"{tt_prompt} "
-        f"Tall 9:16 vertical format. Dynamic, eye-catching TikTok cover aesthetic. "
-        f"Vibrant colors, high energy. "
+        f"STYLE: Real photograph, NOT digital art, NOT illustration. "
+        f"Shot on iPhone 15 Pro or Sony A7 35mm. Candid, dynamic, high energy. "
+        f"Tall 9:16 vertical format. Natural colors, real moment. "
         f"NO text, NO words, NO watermarks."
     )
     tt_img = _generate_dalle_image(full_tt_prompt, dalle_size="1024x1792")
@@ -381,8 +389,9 @@ def generate_filler_images(theme: str, content: dict, out_dir: str) -> dict:
     yt_prompt = yt.get("image_prompt", f"Cinematic wide landscape: {theme}. Dramatic, high contrast. No text.")
     full_yt_prompt = (
         f"{yt_prompt} "
-        f"Wide 16:9 YouTube thumbnail format. Cinematic, dramatic, high contrast. "
-        f"Professional photography quality. "
+        f"STYLE: Real cinematic DSLR photograph, NOT digital art, NOT illustration. "
+        f"Shot on RED camera or Canon C70. Dramatic natural lighting, real location. "
+        f"Wide 16:9 format. High contrast, photographic quality. "
         f"NO text, NO words, NO watermarks."
     )
     yt_img = _generate_dalle_image(full_yt_prompt, dalle_size="1792x1024")
