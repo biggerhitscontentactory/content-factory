@@ -2072,13 +2072,22 @@ async function runFillerPost() {
       headers: authHeaders(),
       body: JSON.stringify({ theme })
     });
+    // Handle session expiry or non-JSON response
+    if (res.status === 401) { window.location.href = '/login'; return; }
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      document.getElementById('filler-spinner').style.display = 'none';
+      alert('Session expired or server error. Please refresh the page and log in again.');
+      return;
+    }
     const data = await res.json();
     document.getElementById('filler-spinner').style.display = 'none';
+    if (data.error === 'session_expired') { window.location.href = '/login'; return; }
     if (data.error) { alert('Error: ' + data.error); return; }
     renderFillerPost(data);
   } catch(e) {
     document.getElementById('filler-spinner').style.display = 'none';
-    alert('Request failed: ' + e.message);
+    alert('Request failed: ' + e.message + '. Please refresh the page and try again.');
   }
 }
 
@@ -2137,8 +2146,16 @@ async function runManualPost() {
       headers: authHeaders(),
       body: JSON.stringify({ product_url: url })
     });
+    if (res.status === 401) { window.location.href = '/login'; return; }
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      document.getElementById('manual-spinner').style.display = 'none';
+      alert('Session expired or server error. Please refresh the page and log in again.');
+      return;
+    }
     const data = await res.json();
     document.getElementById('manual-spinner').style.display = 'none';
+    if (data.error === 'session_expired') { window.location.href = '/login'; return; }
     if (data.error) { alert('Error: ' + data.error); return; }
     renderManualPost(data);
   } catch(e) {
