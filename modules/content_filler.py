@@ -95,7 +95,7 @@ Always tie content back to American pride, freedom, heritage, or celebration whe
 
     user_prompt = f"""Generate a complete social media content pack for the theme: "{theme}"
 
-This is ENGAGEMENT CONTENT — no product links, no selling. Pure lifestyle/inspiration.
+This is ENGAGEMENT CONTENT — no product links, no selling. Pure Americana lifestyle/inspiration.
 
 Return ONLY valid JSON in this exact structure:
 {{
@@ -105,41 +105,41 @@ Return ONLY valid JSON in this exact structure:
       "titles": ["title1", "title2", "title3", "title4", "title5"],
       "descriptions": ["desc1", "desc2", "desc3", "desc4"],
       "hashtags": "#tag1 #tag2 #tag3 #tag4 #tag5 #tag6 #tag7 #tag8 #tag9 #tag10",
-      "image_prompt": "Candid DSLR lifestyle photograph for Pinterest (vertical 2:3). Real people, real setting, natural light. Specific camera details like 'shot on Canon EOS R5, 35mm f/1.8, golden hour'. NOT illustrated, NOT AI art. NO text in image."
+      "image_prompt": "[Write a specific DALL-E prompt for a real American landscape or Americana scene related to {theme}. Focus on the PLACE or SETTING, not people. Example style: 'Aerial drone photograph of Arches National Park at golden hour, red sandstone arches glowing, vast Utah desert, deep blue sky, shot on DJI Mavic 3, ultra-sharp, National Geographic quality, NO people, NO text']"
     }},
     {{
       "titles": ["title1", "title2", "title3", "title4", "title5"],
       "descriptions": ["desc1", "desc2", "desc3", "desc4"],
       "hashtags": "#tag1 #tag2 ...",
-      "image_prompt": "Different candid DSLR lifestyle photo for Pinterest pin 2 — completely different scene, different people, different time of day. Real photography style. NO text."
+      "image_prompt": "[Different angle/scene of {theme} — different time of day, different composition. Still a real American place or Americana setting. NO people, NO text.]"
     }},
     {{
       "titles": ["title1", "title2", "title3", "title4", "title5"],
       "descriptions": ["desc1", "desc2", "desc3", "desc4"],
       "hashtags": "#tag1 #tag2 ...",
-      "image_prompt": "Different candid DSLR lifestyle photo for Pinterest pin 3 — unique angle, unique moment. Real photography style. NO text."
+      "image_prompt": "[Third unique scene of {theme} — close-up detail, or different location aspect. Real American setting. NO people, NO text.]"
     }}
   ],
   "instagram_post": {{
     "titles": ["caption1", "caption2", "caption3", "caption4", "caption5"],
     "hashtags": "#tag1 #tag2 #tag3 ... (25-30 tags)",
-    "image_prompt": "Candid DSLR Instagram photo (square 1:1). Real moment, natural light, shallow depth of field. Shot on Sony A7IV, 50mm lens. Bright, scroll-stopping but 100% photographic — NOT illustrated. NO text."
+    "image_prompt": "[Square 1:1 photograph of a real American place or Americana scene related to {theme}. Specific location detail. Shot on Canon EOS R5, 24mm lens, natural light. NO people, NO text.]"
   }},
   "facebook_post": {{
     "titles": ["post1", "post2", "post3", "post4", "post5"],
     "hashtags": "#tag1 #tag2 #tag3 #tag4 #tag5",
-    "image_prompt": "Wide-angle DSLR lifestyle photo for Facebook (landscape 16:9). Warm golden hour light, real people, community/family feel. Shot on Canon 24mm f/2.8. 100% photographic, NOT illustrated. NO text."
+    "image_prompt": "[Wide landscape photograph 16:9 of a real American town, park, or Americana scene related to {theme}. Golden hour light. Shot on Canon 24-70mm f/2.8. NO people, NO text.]"
   }},
   "tiktok_post": {{
     "titles": ["hook1", "hook2", "hook3", "hook4", "hook5"],
     "hashtags": "#tag1 #tag2 ... #fyp #foryou (15-20 tags)",
-    "image_prompt": "Vertical DSLR lifestyle photo for TikTok cover (9:16). Dynamic, youthful, real candid moment. Shot on iPhone 15 Pro or Sony A7 with 35mm. High energy, natural colors, NOT illustrated. NO text."
+    "image_prompt": "[Tall vertical 9:16 photograph of a dramatic American landscape or Americana scene related to {theme}. Striking, high-contrast natural light. NO people, NO text.]"
   }},
   "youtube_post": {{
     "titles": ["title1", "title2", "title3", "title4", "title5"],
     "descriptions": ["Full YouTube description option 1 (2-3 sentences, SEO rich)", "Full YouTube description option 2", "Full YouTube description option 3"],
     "hashtags": "#tag1 #tag2 #tag3 #tag4 #tag5",
-    "image_prompt": "Cinematic DSLR wide-angle photo for YouTube thumbnail (16:9). Dramatic natural lighting, real location, high contrast but photographic. Shot on RED camera or Canon C70. NOT illustrated, NOT AI art. NO text."
+    "image_prompt": "[Cinematic wide 16:9 photograph of a stunning American landscape or iconic Americana location related to {theme}. Dramatic lighting, epic scale. Shot on RED camera. NO people, NO text.]"
   }}
 }}
 
@@ -151,16 +151,21 @@ Requirements for titles/captions:
 - TikTok hooks: punchy, 1 sentence, starts with action word or question
 - YouTube titles: 8-12 words, curiosity gap, searchable
 
-Requirements for image prompts:
-- MUST be shot in the style of a professional DSLR photograph — NOT illustrated, NOT painted, NOT AI-looking
-- Use specific camera language: "shot on Canon EOS R5", "35mm lens", "f/1.8 bokeh", "golden hour natural light", "shallow depth of field"
-- Real people, real places, real moments — candid lifestyle photography
-- Skin tones, textures, fabrics, grass, sky must look 100% photographic and natural
-- No surreal colors, no painterly strokes, no digital art look
-- Patriotic color palette (red, white, blue, gold) through props/clothing/environment — not color grading
-- Each Pinterest pin must be a DIFFERENT scene/angle with different people/setting
+CRITICAL requirements for image prompts — READ CAREFULLY:
+- Focus on PLACES, LANDSCAPES, OBJECTS, and SETTINGS — NOT people
+- Real American locations: national parks, small towns, Main Street USA, county fairs, monuments, rivers, mountains, prairies, coastlines, historic sites
+- Americana objects: vintage trucks, diners, barns, flags on porches, rodeos, state fairs, baseball fields, covered bridges
+- Photography style: National Geographic / Ansel Adams / travel photography — NOT lifestyle stock photos
+- Specify exact camera: 'shot on Canon EOS R5', 'Nikon D850', 'DJI drone', 'Sony A7R V'
+- Specify lens and light: '24mm wide angle', 'golden hour', 'blue hour', 'overcast soft light', 'sunrise'
+- NO people in any image — landscapes, objects, architecture, nature only
+- NO illustrated look, NO painterly style, NO Unreal Engine render, NO CGI
+- 100% photographic: real grain, real depth of field, real atmospheric haze, real shadows
 - NO text, NO words, NO watermarks, NO logos in the generated image
-- Examples of good prompts: Candid DSLR photo of a family at a 4th of July picnic, American flag bunting in background, golden hour light, shallow depth of field, Canon 35mm"""
+- Each Pinterest pin must be a COMPLETELY DIFFERENT scene, angle, and time of day
+- Good examples: 'Aerial drone photo of Monument Valley at sunrise, red mesas casting long shadows, vast empty desert highway, no people, shot on DJI Mavic 3, National Geographic quality'
+  'Close-up of a weathered American flag on a white picket fence, small town street in background, shallow depth of field, Nikon 85mm f/1.4, golden afternoon light'
+  'Wide angle photo of a classic American diner at dusk, neon signs glowing, empty parking lot, Route 66, Canon 16-35mm, cinematic blue hour light'"""
 
     try:
         resp = client.chat.completions.create(
@@ -296,12 +301,13 @@ def generate_filler_images(theme: str, content: dict, out_dir: str) -> dict:
     pins = content.get("pinterest_pins", [])
     for i, pin in enumerate(pins[:3]):
         prompt = pin.get("image_prompt", f"Stunning patriotic lifestyle scene: {theme}. Vertical portrait, vibrant, photorealistic. No text.")
-        # Enforce photorealistic photography style for Pinterest
+        # Enforce real American landscape photography — no people
         full_prompt = (
             f"{prompt} "
-            f"STYLE: Real DSLR photograph, NOT digital art, NOT illustration, NOT AI-generated look. "
-            f"Shot on Canon EOS R5 with 35mm f/1.8 lens. Natural light, shallow depth of field, "
-            f"realistic skin tones, genuine textures. Candid lifestyle photography. "
+            f"STYLE: Real travel/landscape photograph, National Geographic quality. "
+            f"NOT digital art, NOT illustration, NOT Unreal Engine, NOT CGI, NOT stock photo. "
+            f"Real photographic grain, real atmospheric depth, real shadows and highlights. "
+            f"NO people, NO faces, NO crowds. Landscapes, architecture, objects, nature only. "
             f"Vertical 2:3 portrait orientation. "
             f"NO text, NO words, NO watermarks, NO logos."
         )
@@ -326,9 +332,11 @@ def generate_filler_images(theme: str, content: dict, out_dir: str) -> dict:
     ig_prompt = ig.get("image_prompt", f"Beautiful square lifestyle photo: {theme}. Bold, bright, Instagram-worthy. No text.")
     full_ig_prompt = (
         f"{ig_prompt} "
-        f"STYLE: Real DSLR photograph, NOT digital art, NOT illustration. "
-        f"Shot on Sony A7IV 50mm f/1.4. Natural light, bokeh background, realistic colors. "
-        f"Square 1:1 format. Candid lifestyle photography, scroll-stopping. "
+        f"STYLE: Real travel/landscape photograph, National Geographic quality. "
+        f"NOT digital art, NOT illustration, NOT Unreal Engine, NOT CGI. "
+        f"Real photographic grain, natural colors, real depth of field. "
+        f"NO people, NO faces. Landscapes, architecture, objects, nature only. "
+        f"Square 1:1 format. "
         f"NO text, NO words, NO watermarks."
     )
     ig_img = _generate_dalle_image(full_ig_prompt, dalle_size="1024x1024")
@@ -347,9 +355,11 @@ def generate_filler_images(theme: str, content: dict, out_dir: str) -> dict:
     fb_prompt = fb.get("image_prompt", f"Wide landscape lifestyle photo: {theme}. Warm, shareable, community feel. No text.")
     full_fb_prompt = (
         f"{fb_prompt} "
-        f"STYLE: Real DSLR photograph, NOT digital art, NOT illustration. "
-        f"Shot on Canon 24-70mm f/2.8. Golden hour warm light, real people, natural setting. "
-        f"Wide 16:9 landscape format. Warm, inviting, community feel. "
+        f"STYLE: Real wide-angle landscape photograph, National Geographic quality. "
+        f"NOT digital art, NOT illustration, NOT Unreal Engine, NOT CGI. "
+        f"Real photographic grain, golden hour light, natural colors. "
+        f"NO people, NO faces. American landscape, town, or Americana scene. "
+        f"Wide 16:9 landscape format. "
         f"NO text, NO words, NO watermarks."
     )
     fb_img = _generate_dalle_image(full_fb_prompt, dalle_size="1792x1024")
@@ -368,9 +378,11 @@ def generate_filler_images(theme: str, content: dict, out_dir: str) -> dict:
     tt_prompt = tt.get("image_prompt", f"Dynamic vertical lifestyle image: {theme}. Eye-catching, youthful. No text.")
     full_tt_prompt = (
         f"{tt_prompt} "
-        f"STYLE: Real photograph, NOT digital art, NOT illustration. "
-        f"Shot on iPhone 15 Pro or Sony A7 35mm. Candid, dynamic, high energy. "
-        f"Tall 9:16 vertical format. Natural colors, real moment. "
+        f"STYLE: Real dramatic landscape photograph, National Geographic quality. "
+        f"NOT digital art, NOT illustration, NOT Unreal Engine, NOT CGI. "
+        f"High contrast natural light, real photographic quality. "
+        f"NO people, NO faces. American landscape or Americana scene. "
+        f"Tall 9:16 vertical format. "
         f"NO text, NO words, NO watermarks."
     )
     tt_img = _generate_dalle_image(full_tt_prompt, dalle_size="1024x1792")
@@ -389,9 +401,11 @@ def generate_filler_images(theme: str, content: dict, out_dir: str) -> dict:
     yt_prompt = yt.get("image_prompt", f"Cinematic wide landscape: {theme}. Dramatic, high contrast. No text.")
     full_yt_prompt = (
         f"{yt_prompt} "
-        f"STYLE: Real cinematic DSLR photograph, NOT digital art, NOT illustration. "
-        f"Shot on RED camera or Canon C70. Dramatic natural lighting, real location. "
-        f"Wide 16:9 format. High contrast, photographic quality. "
+        f"STYLE: Real cinematic landscape photograph, National Geographic / BBC Earth quality. "
+        f"NOT digital art, NOT illustration, NOT Unreal Engine, NOT CGI. "
+        f"Epic scale, dramatic natural lighting, real photographic depth. "
+        f"NO people, NO faces. Stunning American landscape or iconic Americana location. "
+        f"Wide 16:9 format. "
         f"NO text, NO words, NO watermarks."
     )
     yt_img = _generate_dalle_image(full_yt_prompt, dalle_size="1792x1024")
