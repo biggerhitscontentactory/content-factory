@@ -1067,28 +1067,42 @@ async function runBatch(mode, dryRun) {
 }
 
 async function pollJob(jobId, outputId, spinnerId, mode) {
-  const POLL_INTERVAL = 3000; // 3 seconds
-  while (true) {
+  const POLL_INTERVAL = 4000; // 4 seconds
+  const MAX_RETRIES = 6;      // retry up to 6 times on network error before giving up
+  let networkErrors = 0;
+  let totalPolls = 0;
+  const MAX_POLLS = 120;      // 8 minutes max (120 x 4s)
+
+  while (totalPolls < MAX_POLLS) {
     await new Promise(res => setTimeout(res, POLL_INTERVAL));
+    totalPolls++;
     try {
       const pr = await fetch(`/api/run/status/${jobId}`, {headers: {'X-Auth-Token': API_TOKEN}});
-      // Handle session expiry — now returns JSON 401 instead of HTML redirect
+      networkErrors = 0; // reset retry counter on successful connection
+      // Handle session expiry — returns JSON 401
       if (pr.status === 401) {
         const errData = await pr.json().catch(() => ({}));
         if (errData.error === 'session_expired') {
           setOutput(outputId, 'Session expired — redirecting to login...');
           setTimeout(() => window.location.href = '/login', 1000);
         } else {
-          setOutput(outputId, 'Auth error: ' + pr.status);
+          setOutput(outputId, 'Auth error — please refresh and log in again.');
         }
         break;
       }
-      if (!pr.ok) { setOutput(outputId, 'Polling error: ' + pr.status); break; }
+      if (!pr.ok) {
+        // Non-fatal HTTP error — retry
+        setOutput(outputId, `Server returned ${pr.status} — retrying...`);
+        continue;
+      }
       const pd = await pr.json();
       if (pd.output) setOutput(outputId, pd.output);
       if (pd.status === 'done' || pd.status === 'error') {
         if (mode === 'ecommerce' && pd.preview && pd.preview.length > 0) {
           renderPreviewGallery(pd.preview);
+        }
+        if (pd.status === 'error') {
+          setOutput(outputId, '✗ Error: ' + (pd.output || 'Unknown error'));
         }
         hideSpinner(spinnerId);
         disableBtns(false);
@@ -1096,9 +1110,18 @@ async function pollJob(jobId, outputId, spinnerId, mode) {
         return;
       }
     } catch(e) {
-      setOutput(outputId, 'Poll error: ' + e.message);
-      break;
+      // Network error (server restarting, Railway dyno waking up, etc.)
+      networkErrors++;
+      if (networkErrors >= MAX_RETRIES) {
+        setOutput(outputId, `Network error after ${MAX_RETRIES} retries: ${e.message}. Please refresh the page.`);
+        break;
+      }
+      setOutput(outputId, `Network hiccup (${networkErrors}/${MAX_RETRIES}) — retrying in ${POLL_INTERVAL/1000}s...`);
+      // Continue loop — will retry after POLL_INTERVAL
     }
+  }
+  if (totalPolls >= MAX_POLLS) {
+    setOutput(outputId, 'Job timed out after 8 minutes. Check the Activity Log for results.');
   }
   hideSpinner(spinnerId);
   disableBtns(false);
