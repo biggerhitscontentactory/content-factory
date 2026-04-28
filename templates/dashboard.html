@@ -1007,6 +1007,7 @@ function showTab(name) {
   if (name === 'aichannel') loadTopics();
   if (name === 'setup') { loadConfigStatus(); loadBoardConfig(); }
   if (name === 'blog') { loadBlogStatus(); }
+  if (name === 'wp-blog') { loadWpCategories(); }
 }
 
 // ── Stats ───────────────────────────────────────────────────────────────────
@@ -2590,12 +2591,7 @@ async function runWpBlog() {
   setTimeout(poll, 3000);
 }
 
-// Auto-load WP categories when the wp-blog tab is opened
-const _origShowTab = showTab;
-function showTab(name) {
-  _origShowTab(name);
-  if (name === 'wp-blog') loadWpCategories();
-}
+// WP categories are now loaded inside the main showTab function above
 
 </script>
 
