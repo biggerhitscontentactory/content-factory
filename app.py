@@ -1094,7 +1094,8 @@ def api_wp_blog():
             from blog_writer import generate_blog_article, build_preview_html
             from wordpress_connector import (
                 test_connection, get_or_create_category,
-                upload_image_from_url, create_post, get_categories
+                upload_image_from_url, create_post, get_categories,
+                WP_URL, WP_USER, WP_APP_PASS
             )
 
             # Step 1: Fetch all products from Shopify
@@ -1111,22 +1112,45 @@ def api_wp_blog():
                 return
             _update_job(jid, {"output": f"Fetched {len(products)} products. Generating article with GPT..."})
 
-            # Step 2: Generate article
+            # Step 2: Upload ALL product images to WordPress media library first
+            _update_job(jid, {"output": "Uploading product images to WordPress media library..."})
+            featured_media_id = None
+            for i, p in enumerate(products):
+                shopify_url = p.get("image_url", "")
+                if shopify_url:
+                    safe_title = p.get("title", f"product-{i}")[:40].lower().replace(" ", "-").replace("/","-")
+                    wp_media_id = upload_image_from_url(
+                        shopify_url,
+                        filename=f"blog-{jid}-{safe_title}.jpg"
+                    )
+                    if wp_media_id:
+                        # Get the WordPress-hosted URL for this media
+                        try:
+                            import requests as _req, base64 as _b64
+                            _creds = _b64.b64encode(f"{WP_USER}:{WP_APP_PASS}".encode()).decode()
+                            _mresp = _req.get(
+                                f"{WP_URL}/wp-json/wp/v2/media/{wp_media_id}",
+                                headers={"Authorization": f"Basic {_creds}"},
+                                timeout=10
+                            )
+                            if _mresp.status_code == 200:
+                                wp_image_url = _mresp.json().get("source_url", shopify_url)
+                                p["image_url"] = wp_image_url  # replace with WP URL
+                                if i == 0:
+                                    featured_media_id = wp_media_id
+                        except Exception as _me:
+                            print(f"[WARN] Could not get WP media URL: {_me}")
+                    else:
+                        print(f"[WARN] Image upload failed for product {i}, using Shopify URL")
+
+            # Step 3: Generate article (now with WordPress-hosted image URLs)
+            _update_job(jid, {"output": f"Images uploaded. Generating article with GPT..."})
             article = generate_blog_article(topic, products)
             if "error" in article:
                 _update_job(jid, {"status": "error", "error": article["error"]})
                 return
 
-            _update_job(jid, {"output": "Article written. Uploading featured image to WordPress..."})
-
-            # Step 3: Upload featured image (first product's image)
-            featured_media_id = None
-            first_image = next((p.get("image_url") for p in products if p.get("image_url")), None)
-            if first_image:
-                featured_media_id = upload_image_from_url(
-                    first_image,
-                    filename=f"blog-{jid}-featured.jpg"
-                )
+            _update_job(jid, {"output": "Article written. Resolving WordPress category..."})
 
             # Step 4: Resolve or create category
             _update_job(jid, {"output": "Resolving WordPress category..."})
