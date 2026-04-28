@@ -12,9 +12,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-WP_URL      = os.environ.get("WP_URL", "").rstrip("/")
-WP_USER     = os.environ.get("WP_USER", "")
-WP_APP_PASS = os.environ.get("WP_APP_PASS", "")
+WP_URL      = os.environ.get("WP_URL", "https://www.officialamerica250store.com").rstrip("/")
+WP_USER     = os.environ.get("WP_USER", "america250")
+WP_APP_PASS = os.environ.get("WP_APP_PASS", "Jt4X yrAT Fy4Y PNkh UaYL ajYw")
 
 
 def _headers() -> dict:
