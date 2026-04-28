@@ -1067,6 +1067,148 @@ def api_filler_status(job_id):
     })
 
 
+# ─── API: WordPress Blog Post Generator ─────────────────────────────────────
+@app.route("/api/wp-blog", methods=["POST"])
+@login_required
+def api_wp_blog():
+    """Start async WordPress blog post generation and return job_id immediately."""
+    data = request.get_json() or {}
+    topic        = (data.get("topic") or "").strip()
+    product_urls = data.get("product_urls", [])  # list of up to 10 URLs
+    category     = (data.get("category") or "").strip()  # existing or new category name
+    post_status  = data.get("post_status", "draft")  # 'draft' or 'publish'
+
+    if not topic:
+        return jsonify({"error": "topic is required"}), 400
+    if not product_urls or len(product_urls) < 1:
+        return jsonify({"error": "At least 1 product URL is required"}), 400
+    if len(product_urls) > 10:
+        product_urls = product_urls[:10]
+
+    job_id = str(uuid.uuid4())[:8]
+    _write_job(job_id, {"status": "running", "output": "Starting blog generation...", "result": None, "error": None})
+
+    def _run_wp_blog(jid, topic, product_urls, category, post_status):
+        try:
+            from shopify_connector import get_product_by_url, extract_product_data
+            from blog_writer import generate_blog_article, build_preview_html
+            from wordpress_connector import (
+                test_connection, get_or_create_category,
+                upload_image_from_url, create_post, get_categories
+            )
+
+            # Step 1: Fetch all products from Shopify
+            _update_job(jid, {"output": f"Fetching {len(product_urls)} products from USA Store..."})
+            products = []
+            for url in product_urls:
+                raw = get_product_by_url(url)
+                if raw:
+                    p = extract_product_data(raw)
+                    if p:
+                        products.append(p)
+            if not products:
+                _update_job(jid, {"status": "error", "error": "Could not fetch any products from the provided URLs."})
+                return
+            _update_job(jid, {"output": f"Fetched {len(products)} products. Generating article with GPT..."})
+
+            # Step 2: Generate article
+            article = generate_blog_article(topic, products)
+            if "error" in article:
+                _update_job(jid, {"status": "error", "error": article["error"]})
+                return
+
+            _update_job(jid, {"output": "Article written. Uploading featured image to WordPress..."})
+
+            # Step 3: Upload featured image (first product's image)
+            featured_media_id = None
+            first_image = next((p.get("image_url") for p in products if p.get("image_url")), None)
+            if first_image:
+                featured_media_id = upload_image_from_url(
+                    first_image,
+                    filename=f"blog-{jid}-featured.jpg"
+                )
+
+            # Step 4: Resolve or create category
+            _update_job(jid, {"output": "Resolving WordPress category..."})
+            cat_name = category or article.get("suggested_category") or "Patriotic Lifestyle"
+            category_id = get_or_create_category(cat_name)
+
+            # Step 5: Post to WordPress
+            _update_job(jid, {"output": f"Posting to WordPress as '{post_status}'..."})
+            wp_result = create_post(
+                title=article["title"],
+                html_content=article["html_content"],
+                category_id=category_id,
+                featured_media_id=featured_media_id,
+                seo_description=article.get("seo_description", ""),
+                status=post_status,
+                tags=article.get("tags", []),
+            )
+
+            if not wp_result.get("ok"):
+                _update_job(jid, {"status": "error", "error": wp_result.get("error", "WordPress post failed")})
+                return
+
+            # Build preview HTML for dashboard
+            preview_html = build_preview_html(article, products)
+
+            _update_job(jid, {
+                "status": "done",
+                "output": f"Done! Post {'published' if post_status == 'publish' else 'saved as draft'} on WordPress.",
+                "result": {
+                    "title": article["title"],
+                    "seo_description": article.get("seo_description", ""),
+                    "suggested_category": cat_name,
+                    "tags": article.get("tags", []),
+                    "wp_post_id": wp_result.get("post_id"),
+                    "wp_url": wp_result.get("url"),
+                    "wp_status": wp_result.get("status"),
+                    "products_used": len(products),
+                    "preview_html": preview_html,
+                }
+            })
+
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            _update_job(jid, {"status": "error", "error": str(exc)})
+
+    threading.Thread(
+        target=_run_wp_blog,
+        args=(job_id, topic, product_urls, category, post_status),
+        daemon=True
+    ).start()
+    return jsonify({"job_id": job_id, "status": "running"})
+
+
+@app.route("/api/wp-blog/status/<job_id>")
+@login_required
+def api_wp_blog_status(job_id):
+    """Poll WordPress blog job status."""
+    job = _read_job(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify({
+        "job_id": job_id,
+        "status": job.get("status", "unknown"),
+        "output": job.get("output", ""),
+        "result": job.get("result"),
+        "error": job.get("error"),
+    })
+
+
+@app.route("/api/wp-categories")
+@login_required
+def api_wp_categories():
+    """Return list of WordPress categories for the blog tab dropdown."""
+    try:
+        from wordpress_connector import get_categories
+        cats = get_categories()
+        return jsonify({"categories": cats})
+    except Exception as e:
+        return jsonify({"categories": [], "error": str(e)})
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "time": datetime.now().isoformat()})

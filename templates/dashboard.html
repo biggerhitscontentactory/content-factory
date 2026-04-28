@@ -169,6 +169,7 @@
   <button class="nav-btn" onclick="showTab('blog')">📝 Blog Generator</button>
   <button class="nav-btn" onclick="showTab('manual')">✂️ Manual Post</button>
   <button class="nav-btn" onclick="showTab('filler')">🎨 Content Filler</button>
+  <button class="nav-btn" onclick="showTab('wp-blog')">🇺🇸 America 250 Blog</button>
 </div>
 
 <div class="container">
@@ -883,6 +884,107 @@
       </div>
 
     </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ AMERICA 250 BLOG TAB -->
+  <div id="tab-wp-blog" class="tab-panel">
+
+    <!-- Generator Card -->
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-title">🇺🇸 America 250 Blog Generator</div>
+      <p style="color:#94a3b8;font-size:13px;margin-bottom:16px;">
+        Enter a topic, paste up to 10 USA Store product URLs, choose a category, and GPT writes a full SEO article
+        with embedded product images and links — then posts it directly to your WordPress site.
+      </p>
+
+      <!-- Topic -->
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Blog Topic / Title Hint</label>
+        <input id="wpblog-topic" type="text" placeholder="e.g. Best Patriotic Gifts for July 4th 2026"
+          style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:10px 12px;color:#f1f5f9;font-size:14px;box-sizing:border-box;">
+      </div>
+
+      <!-- Quick topics -->
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Quick Topic Ideas</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="setWpBlogTopic('Best Patriotic Gifts for America 250th Anniversary 2026')">🎁 Patriotic Gifts</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="setWpBlogTopic('Best American Flag Hats for 4th of July 2026')">🧢 American Hats</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="setWpBlogTopic('Top Patriotic Apparel and Clothing for Independence Day')">👕 Patriotic Apparel</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="setWpBlogTopic('Unique American Gifts for Him and Her')">🎀 Unique Gifts</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="setWpBlogTopic('America 250th Birthday Celebration Ideas and Products')">🎂 America 250</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="setWpBlogTopic('Best Patriotic Home Decor for July 4th')">🏠 Home Decor</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="setWpBlogTopic('Top Patriotic Drinkware and Kitchen Gifts for Americans')">🍺 Drinkware</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="setWpBlogTopic('Best Gifts for Veterans and Military Families')">🎖️ Veterans</button>
+        </div>
+      </div>
+
+      <!-- Product URLs -->
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Product URLs (1–10, one per line)</label>
+        <textarea id="wpblog-urls" rows="7" placeholder="https://www.officialusastore.com/products/product-handle-1&#10;https://www.officialusastore.com/products/product-handle-2&#10;https://www.officialusastore.com/products/product-handle-3"
+          style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:10px 12px;color:#f1f5f9;font-size:13px;box-sizing:border-box;font-family:monospace;resize:vertical;"></textarea>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">Paste product page URLs from officialusastore.com — one per line, up to 10.</div>
+      </div>
+
+      <!-- Category row -->
+      <div style="margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Existing Category</label>
+          <div style="display:flex;gap:8px;">
+            <select id="wpblog-category-select"
+              style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 10px;color:#f1f5f9;font-size:13px;">
+              <option value="">— Loading... —</option>
+            </select>
+            <button class="btn btn-ghost" style="font-size:11px;padding:6px 10px;white-space:nowrap;" onclick="loadWpCategories()">↻</button>
+          </div>
+        </div>
+        <div style="flex:1;min-width:200px;">
+          <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Or Create New Category</label>
+          <input id="wpblog-category-new" type="text" placeholder="e.g. July 4th Gift Guides"
+            style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 10px;color:#f1f5f9;font-size:13px;box-sizing:border-box;">
+          <div style="font-size:11px;color:#64748b;margin-top:3px;">Leave blank to use AI-suggested category.</div>
+        </div>
+      </div>
+
+      <!-- Post Status -->
+      <div style="margin-bottom:18px;">
+        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Post Status</label>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#f1f5f9;font-size:13px;">
+            <input type="radio" name="wpblog-status" value="draft" checked style="accent-color:#3b82f6;"> 📝 Save as Draft
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#f1f5f9;font-size:13px;">
+            <input type="radio" name="wpblog-status" value="publish" style="accent-color:#22c55e;"> 🚀 Publish Immediately
+          </label>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-green" id="wpblog-generate-btn" onclick="runWpBlog()">🚀 Generate &amp; Post to WordPress</button>
+      </div>
+
+      <div id="wpblog-spinner" class="spinner-wrap" style="display:none;margin-top:14px;">
+        <div class="spinner"></div>
+        <span id="wpblog-spinner-text">Starting...</span>
+      </div>
+    </div>
+
+    <!-- Result Card -->
+    <div class="card" id="wpblog-result-card" style="display:none;margin-bottom:14px;">
+      <div class="section-title">✅ Blog Post Created</div>
+      <div id="wpblog-result-meta" style="margin-bottom:14px;font-size:13px;color:#94a3b8;"></div>
+      <div id="wpblog-live-link" style="margin-bottom:16px;display:none;">
+        <a id="wpblog-live-url" href="#" target="_blank" class="btn btn-green" style="text-decoration:none;font-size:14px;">
+          🔗 View Post on WordPress →
+        </a>
+      </div>
+      <div style="border-top:1px solid #334155;padding-top:14px;">
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Article Preview</div>
+        <div id="wpblog-preview-html" style="background:#fff;border-radius:8px;padding:20px;color:#222;max-height:600px;overflow-y:auto;"></div>
+      </div>
+    </div>
+
   </div>
 
 </div><!-- /container -->
@@ -2356,6 +2458,143 @@ function copyText(btn, text) {
     btn.style.color = '#34d399';
     setTimeout(() => { btn.textContent = orig; btn.style.color = '#94a3b8'; }, 2000);
   });
+}
+
+// ── America 250 Blog Generator ─────────────────────────────────────────────
+
+function setWpBlogTopic(t) {
+  document.getElementById('wpblog-topic').value = t;
+}
+
+async function loadWpCategories() {
+  const sel = document.getElementById('wpblog-category-select');
+  sel.innerHTML = '<option value="">— Loading... —</option>';
+  try {
+    const r = await fetch('/api/wp-categories', { headers: { 'X-Auth-Token': API_TOKEN } });
+    const data = await r.json();
+    const cats = data.categories || [];
+    sel.innerHTML = '<option value="">— AI will suggest —</option>';
+    cats.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.name;
+      opt.textContent = c.name;
+      sel.appendChild(opt);
+    });
+  } catch(e) {
+    sel.innerHTML = '<option value="">— Could not load —</option>';
+  }
+}
+
+async function runWpBlog() {
+  const topic = (document.getElementById('wpblog-topic').value || '').trim();
+  const urlsRaw = (document.getElementById('wpblog-urls').value || '').trim();
+  const catSelect = (document.getElementById('wpblog-category-select').value || '').trim();
+  const catNew = (document.getElementById('wpblog-category-new').value || '').trim();
+  const postStatus = document.querySelector('input[name="wpblog-status"]:checked')?.value || 'draft';
+
+  if (!topic) { alert('Please enter a blog topic.'); return; }
+  const productUrls = urlsRaw.split('\n').map(u => u.trim()).filter(u => u.length > 0);
+  if (productUrls.length === 0) { alert('Please paste at least one product URL.'); return; }
+
+  const category = catNew || catSelect || '';
+
+  const btn = document.getElementById('wpblog-generate-btn');
+  btn.disabled = true;
+  document.getElementById('wpblog-result-card').style.display = 'none';
+  document.getElementById('wpblog-spinner').style.display = 'flex';
+  document.getElementById('wpblog-spinner-text').textContent = 'Starting...';
+
+  let jobId = null;
+  try {
+    const resp = await fetch('/api/wp-blog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Auth-Token': API_TOKEN },
+      body: JSON.stringify({ topic, product_urls: productUrls, category, post_status: postStatus })
+    });
+    const txt = await resp.text();
+    let data;
+    try { data = JSON.parse(txt); } catch(e) {
+      if (resp.status === 401 || txt.includes('<html')) { window.location.href = '/login'; return; }
+      throw new Error('Server returned non-JSON: ' + txt.slice(0, 200));
+    }
+    if (data.error) throw new Error(data.error);
+    jobId = data.job_id;
+  } catch(e) {
+    document.getElementById('wpblog-spinner').style.display = 'none';
+    btn.disabled = false;
+    alert('Error: ' + e.message);
+    return;
+  }
+
+  // Poll for completion
+  let retries = 0;
+  const maxRetries = 6;
+  const poll = async () => {
+    try {
+      const r = await fetch(`/api/wp-blog/status/${jobId}`, { headers: { 'X-Auth-Token': API_TOKEN } });
+      const txt = await r.text();
+      let d;
+      try { d = JSON.parse(txt); } catch(e) {
+        if (r.status === 401 || txt.includes('<html')) { window.location.href = '/login'; return; }
+        retries++;
+        if (retries <= maxRetries) { setTimeout(poll, 4000); return; }
+        throw new Error('Non-JSON response');
+      }
+      retries = 0;
+      document.getElementById('wpblog-spinner-text').textContent = d.output || 'Working...';
+
+      if (d.status === 'done') {
+        document.getElementById('wpblog-spinner').style.display = 'none';
+        btn.disabled = false;
+        const res = d.result || {};
+        // Show result card
+        const card = document.getElementById('wpblog-result-card');
+        card.style.display = 'block';
+        // Meta
+        const tags = (res.tags || []).map(t => `<span style="background:#1a3a6b;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;margin:2px;display:inline-block;">${t}</span>`).join(' ');
+        document.getElementById('wpblog-result-meta').innerHTML =
+          `<strong>Title:</strong> ${res.title || ''}<br>` +
+          `<strong>Category:</strong> ${res.suggested_category || ''}<br>` +
+          `<strong>Meta:</strong> ${res.seo_description || ''}<br>` +
+          `<strong>Products used:</strong> ${res.products_used || 0}<br>` +
+          `<strong>Status:</strong> ${res.wp_status || postStatus}<br>` +
+          `<strong>Tags:</strong> ${tags}`;
+        // Live link
+        if (res.wp_url) {
+          document.getElementById('wpblog-live-url').href = res.wp_url;
+          document.getElementById('wpblog-live-link').style.display = 'block';
+        }
+        // Preview
+        document.getElementById('wpblog-preview-html').innerHTML = res.preview_html || '<p>No preview available.</p>';
+        card.scrollIntoView({ behavior: 'smooth' });
+
+      } else if (d.status === 'error') {
+        document.getElementById('wpblog-spinner').style.display = 'none';
+        btn.disabled = false;
+        alert('Error: ' + (d.error || 'Unknown error'));
+      } else {
+        setTimeout(poll, 3000);
+      }
+    } catch(e) {
+      retries++;
+      if (retries <= maxRetries) {
+        document.getElementById('wpblog-spinner-text').textContent = `Network hiccup (${retries}/${maxRetries}) — retrying...`;
+        setTimeout(poll, 5000);
+      } else {
+        document.getElementById('wpblog-spinner').style.display = 'none';
+        btn.disabled = false;
+        alert('Poll error: ' + e.message);
+      }
+    }
+  };
+  setTimeout(poll, 3000);
+}
+
+// Auto-load WP categories when the wp-blog tab is opened
+const _origShowTab = showTab;
+function showTab(name) {
+  _origShowTab(name);
+  if (name === 'wp-blog') loadWpCategories();
 }
 
 </script>
